@@ -87,6 +87,7 @@ function Index() {
       </Suspense>
 
       <div className="fixed bottom-4 right-4 z-[1000] flex max-w-md flex-col gap-2">
+        <ClientScrapeButton />
         <button
           onClick={run}
           disabled={loading}

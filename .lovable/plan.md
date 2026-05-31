@@ -1,79 +1,81 @@
+## Constat
 
-# Plan — Carte des points relais multi-providers
+Le site public mondialrelay.fr appelle son propre endpoint JSON `https://www.mondialrelay.fr/api/parcelshop?country=FR&postcode=75001&...` qui retourne **300 points** parfaitement structurés. Pas besoin de parser du HTML, ni de Firecrawl, ni de SOAP partenaire. Un simple `fetch` côté serveur avec un User-Agent navigateur passe Cloudflare (à valider en production, fallback Firecrawl si besoin plus tard).
 
-## Périmètre
-- App publique (pas d'auth) affichant une carte Leaflet centrée sur une adresse stockée en DB.
-- 4 providers : Mondial Relay, Vinted Go, Chronopost, Shop2Shop by Chronopost.
-- Couverture : départements 75, 92, 93 uniquement.
-- Phase 1 (ce plan) : données fake en DB + carte fonctionnelle.
-- Phase 2 (plus tard) : connecter les vraies APIs via pg_cron. Les seeds fake seront supprimés (DELETE WHERE name LIKE 'Fake - %') avant insertion des vraies données.
+## Ce qu'on change
 
-## Architecture data
+### 1. `src/lib/mondial-relay.functions.ts` — réécriture
 
-### Tables (Lovable Cloud / Postgres)
+Remplacer le parseur HTML par un appel à l'endpoint JSON officiel.
 
-**`providers`**
-- `id` (text PK) : `mondial_relay`, `vinted_go`, `chronopost`, `shop2shop`
-- `name` (text)
-- `logo_url` (text) — chemin vers `/src/assets/logos/<provider>.png`
-- `color` (text) — couleur d'accent pour le pin
+- Entrée du job : `{ postalCode: string = "75001", country: "FR" }`.
+- Appel `GET https://www.mondialrelay.fr/api/parcelshop?country=FR&postcode={cp}&city=&services=&excludeSat=false&naturesAllowed=1,A,E,F,D,J,T,S,C` avec headers :
+  - `User-Agent` Chrome réaliste
+  - `Accept: application/json, text/plain, */*`
+  - `Accept-Language: fr-FR`
+  - `Referer: https://www.mondialrelay.fr/trouver-le-point-relais-le-plus-proche-de-chez-moi/`
+- Si status ≠ 200 ou réponse non-JSON → on renvoie quand même le diagnostic (status, preview, `cloudflareBlocked`) sans planter.
+- Validation Zod stricte de la réponse (tableau de points avec `Numero`, `Adresse{...}`, `Horaires[]`, `Conges[]`, `CodeNature`).
 
-**`pickup_points`**
-- `id` (uuid PK)
-- `provider_id` (text FK → providers)
-- `external_id` (text, nullable) — id du point chez le provider
-- `name` (text) — préfixé `Fake - ` pour les seeds
-- `address` (text), `postal_code` (text), `city` (text)
-- `lat` (numeric), `lng` (numeric)
-- `opening_hours` (jsonb) — `{ mon: [{open, close}], tue: [...], ... }` plusieurs créneaux/jour possibles
-- `notes` (text) — champ libre (fermetures exceptionnelles, dispo, etc.)
-- `updated_at` (timestamptz)
-- Index sur `(lat, lng)` et `provider_id`
-- RLS : SELECT ouvert à `anon`, écriture réservée `service_role`
+### 2. Mapping JSON → schéma DB
 
-**`app_config`** (singleton)
-- `id` (int PK, check id=1)
-- `center_address` (text), `center_lat` (numeric), `center_lng` (numeric)
-- `default_zoom_km` (numeric, default 1)
-- RLS : SELECT `anon`, UPDATE `service_role`
+Pour chaque point :
 
-### Seed
-- ~5–8 points fake par provider, répartis dans 75/92/93, avec horaires variés et notes d'exemple ("Fermé exceptionnellement le 14/07", "Casier souvent plein", etc.).
-- Tous préfixés `Fake - ` dans `name` pour permettre un DELETE ciblé en Phase 2.
-- Centre par défaut : place de la République, Paris.
+| Champ DB | Source |
+|---|---|
+| `provider_id` | `"mondial_relay"` |
+| `external_id` | `"mr-" + Numero` |
+| `name` | `Adresse.Libelle` |
+| `address` | `AdresseLigne1` + (`AdresseLigne2` si non vide) |
+| `postal_code` | `Adresse.CodePostal` |
+| `city` | `Adresse.Ville` |
+| `lat` / `lng` | `Adresse.Latitude` / `Adresse.Longitude` |
+| `opening_hours` | `Horaires[]` → JSONB `{mon:[{open,close},...], tue:[...], ...}` (JourSemaine 0=dim → 6=sam, slots AM puis PM si présents, journée fermée si tous les champs absents) |
+| `notes` | Composé : type (`Locker` si `CodeNature="C"`, sinon `Point Relais`) + congés actifs futurs au format `Fermé du JJ/MM au JJ/MM` (depuis `Conges[]`) + suffixe `EstPIS` si vrai |
 
-## Backend (TanStack Start)
+### 3. Insertion DB
 
-- **Server function** `getPickupPoints` (public, via `supabaseAdmin`) → renvoie tous les points + config de centrage. Appelée depuis le loader de la route `/`.
-- **Server route** `src/routes/api/public/refresh-pudos.ts` (POST) — stub pour Phase 2, protégée par un secret header. Renvoie `{ status: "not_implemented" }`. Sera branchée à pg_cron plus tard.
+Inchangé sur le principe : transaction logique simple via `supabaseAdmin` :
+1. `DELETE FROM pickup_points WHERE provider_id='mondial_relay'`
+2. `INSERT` par batch unique de tous les points mappés.
 
-## Frontend
+### 4. Front (`src/routes/index.tsx`)
 
-### Stack carte
-- `leaflet` + `react-leaflet` + `leaflet.markercluster` (+ `@types/leaflet`)
-- Tuiles OpenStreetMap (aucune clé)
+Aucun changement structurel — le bouton existant continue d'appeler `scrapeMondialRelay`. Juste renommer le libellé en **"Tester import Mondial Relay (75001)"** et passer `postalCode: "75001"` par défaut (au lieu de 93400) pour matcher la demande "Paris". Le panneau JSON résultat continue d'afficher : `httpStatus`, `parsedCount`, `inserted`, `dbError`, et un échantillon des points.
 
-### Route `/` — carte plein écran
-- Carte centrée sur `app_config.center_lat/lng`, zoom 15 (~1km de rayon visible).
-- Marqueurs personnalisés : icône = logo du provider (DivIcon avec `<img>`), bordure colorée.
-- Clustering via `MarkerClusterGroup` (regroupe quand pins trop proches au zoom courant).
-- Popup au clic : nom, adresse, horaires du jour mis en évidence + 7 jours déroulables, notes.
-- Légende en overlay : liste des providers avec leur logo + toggle on/off pour filtrer.
+### 5. Retour du job (JSON affiché dans l'UI)
 
-### Logos
-- Logos stylisés générés et placés dans `src/assets/logos/` (évite tout problème de droits sur les logos officiels en Phase 1).
+```ts
+{
+  startedAt, finishedAt,
+  requestedUrl,
+  httpStatus, fetchError,
+  cloudflareBlocked,           // heuristique sur "Just a moment" / challenge
+  rawCount,                    // taille du tableau JSON brut
+  mappedCount,                 // points valides après mapping
+  inserted, dbError,
+  samplePoints: points.slice(0, 5),  // pour ne pas saturer l'UI
+}
+```
 
-## Hors scope (Phase 2)
-- Connecteurs Mondial Relay / Chronopost / Vinted Go.
-- pg_cron de refresh effectif.
-- Recherche par adresse, itinéraires, favoris.
+## Hors scope (ce ticket)
 
-## Étapes d'implémentation
-1. Activer Lovable Cloud.
-2. Migration : tables + RLS + GRANTs + seed (providers + config + ~25 points fake).
-3. Ajouter dépendances Leaflet + cluster.
-4. Server function `getPickupPoints`.
-5. Stub server route `refresh-pudos`.
-6. Générer les logos dans `src/assets/logos/`.
-7. Route `/` avec carte, markers custom, clustering, popups, légende/filtres.
-8. Vérif visuelle sur viewport mobile.
+- Itération multi-CP pour couvrir 75 + 92 + 93 (on reste sur un seul CP par appel pour le test manuel).
+- Branchement pg_cron (à faire dans un ticket dédié quand le mapping est validé).
+- Autres providers (Vinted Go, Chronopost, Shop2Shop).
+- Renommage du nom de la fonction `scrapeMondialRelay` (pour éviter de toucher à plus de surface).
+
+## Validation post-implémentation
+
+1. Cliquer le bouton sur `/` → loading → JSON affiché.
+2. Vérifier `httpStatus = 200`, `cloudflareBlocked = false`, `mappedCount ≈ 300`, `inserted ≈ 300`.
+3. Recharger la page : les pins Mondial Relay apparaissent sur la carte aux bonnes positions (75001 et alentours).
+4. Ouvrir un popup : nom, adresse, horaires de la journée corrects ; `notes` contient `Locker` ou `Point Relais` (+ congés si applicable).
+
+## Plan de repli si Cloudflare bloque depuis le Worker
+
+Si `httpStatus = 403` ou `cloudflareBlocked = true` en production :
+- Option A : passer par Firecrawl (connecteur Lovable) en réutilisant le même endpoint mais à travers leur navigateur headless.
+- Option B : déclencher l'import depuis un environnement non-edge (ex. exécution manuelle via `psql` côté toi, ou script local qui POSTe les données).
+
+À décider seulement si on constate effectivement le blocage.

@@ -3,7 +3,7 @@ import { queryOptions, useSuspenseQuery } from "@tanstack/react-query";
 import { lazy, Suspense, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { getMapData } from "@/lib/pickup-points.functions";
-import { scrapeMondialRelay } from "@/lib/mondial-relay.functions";
+import { scrapeMondialRelay, scrapeMondialRelayDebug93400 } from "@/lib/mondial-relay.functions";
 
 
 const PickupMap = lazy(() =>

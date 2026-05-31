@@ -127,7 +127,7 @@ async function scrapeOnePostalCode(
       onlyMainContent: false,
       waitFor: 3000,
       location: { country: "FR", languages: ["fr-FR", "fr"] },
-      timeout: 120000,
+      timeout: 300000,
     };
     if (opts.withActions) {
       scrapeOptions.actions = actions;

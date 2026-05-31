@@ -92,7 +92,7 @@ async function scrapeOnePostalCode(
   }
 
   try {
-    const result = await firecrawl.scrape(url, {
+    const scrapeOptions: Record<string, unknown> = {
       formats: [
         {
           type: "json",
@@ -126,10 +126,13 @@ async function scrapeOnePostalCode(
       ],
       onlyMainContent: false,
       waitFor: 3000,
-      actions: actions as never,
       location: { country: "FR", languages: ["fr-FR", "fr"] },
       timeout: 120000,
-    });
+    };
+    if (opts.withActions) {
+      scrapeOptions.actions = actions;
+    }
+    const result = await firecrawl.scrape(url, scrapeOptions as never);
 
     const r = result as {
       json?: unknown;

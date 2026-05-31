@@ -59,15 +59,33 @@ async function scrapeOnePostalCode(
 ): Promise<{ points: RawPoint[]; error: string | null; httpStatus: number }> {
   const url = `https://www.mondialrelay.fr/trouver-le-point-relais-le-plus-proche-de-chez-moi/?codePostal=${postalCode}&pays=${country}`;
 
+  // Tolerant click via executeJavascript: tries multiple selectors / button
+  // texts, never throws if the button is missing (so a missing "show more"
+  // button doesn't abort the whole scrape like a `click` action would).
+  const clickShowMoreScript = `
+    (function () {
+      var texts = ['afficher plus', 'voir plus', 'plus de résultats', 'plus de resultats', 'show more'];
+      var candidates = Array.from(document.querySelectorAll('button, a, [role="button"]'));
+      var btn = candidates.find(function (el) {
+        var t = (el.textContent || '').trim().toLowerCase();
+        if (!t) return false;
+        return texts.some(function (needle) { return t.indexOf(needle) !== -1; });
+      });
+      if (btn) {
+        try { btn.scrollIntoView({ block: 'center' }); } catch (e) {}
+        btn.click();
+        return 'clicked: ' + (btn.textContent || '').trim().slice(0, 80);
+      }
+      return 'no-button';
+    })();
+  `;
+
   const actions: Array<Record<string, unknown>> = [
     { type: "wait", milliseconds: 3000 },
   ];
   for (let i = 0; i < SHOW_MORE_CLICKS; i++) {
-    actions.push({
-      type: "click",
-      selector: 'button:has-text("Afficher plus de résultats")',
-    });
-    actions.push({ type: "wait", milliseconds: 1500 });
+    actions.push({ type: "executeJavascript", script: clickShowMoreScript });
+    actions.push({ type: "wait", milliseconds: 1800 });
   }
 
   try {

@@ -111,6 +111,12 @@ function Index() {
         >
           {loading ? "Import en cours…" : "Importer Mondial Relay (adresse maison)"}
         </button>
+        <button
+          onClick={runDebug}
+          disabled={debugLoading}
+          className="self-end rounded-md bg-secondary px-4 py-2 text-sm font-medium text-secondary-foreground shadow-lg disabled:opacity-60"
+        >
+          {debugLoading ? "Test 93400 en cours…" : "Test 93400 simple (sans actions)"}
         {err && (
           <pre className="max-h-72 overflow-auto rounded-md bg-destructive p-3 text-xs text-destructive-foreground shadow-lg">
             {err}

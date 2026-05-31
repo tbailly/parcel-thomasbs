@@ -1,6 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { z } from "zod";
+import Firecrawl from "@mendable/firecrawl-js";
+
 
 type DayKey = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
 type OpeningSlot = { open: string; close: string };
@@ -120,29 +122,39 @@ export const scrapeMondialRelay = createServerFn({ method: "POST" })
 
     let status = 0;
     let bodyText = "";
-    let fetchError: string | null = null;
-    try {
-      const res = await fetch(url, {
-        method: "GET",
-        headers: {
-          "User-Agent":
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
-          Accept: "application/json, text/plain, */*",
-          "Accept-Language": "fr-FR,fr;q=0.9",
-          Referer:
-            "https://www.mondialrelay.fr/trouver-le-point-relais-le-plus-proche-de-chez-moi/",
-        },
-      });
-      status = res.status;
-      bodyText = await res.text();
-    } catch (err) {
-      fetchError = err instanceof Error ? err.message : String(err);
+    let firecrawlError: string | null = null;
+    const apiKey = process.env.FIRECRAWL_API_KEY;
+    if (!apiKey) {
+      firecrawlError = "FIRECRAWL_API_KEY is not configured";
+    } else {
+      try {
+        const firecrawl = new Firecrawl({ apiKey });
+        const result = await firecrawl.scrape(url, {
+          formats: ["rawHtml"],
+          onlyMainContent: false,
+        });
+        const r = result as {
+          rawHtml?: string;
+          html?: string;
+          metadata?: { statusCode?: number };
+          data?: { rawHtml?: string; html?: string; metadata?: { statusCode?: number } };
+        };
+        bodyText = r.rawHtml ?? r.html ?? r.data?.rawHtml ?? r.data?.html ?? "";
+        status = r.metadata?.statusCode ?? r.data?.metadata?.statusCode ?? (bodyText ? 200 : 0);
+        // Firecrawl wraps JSON responses in <html><body><pre>…</pre></body></html>; extract <pre>
+        const preMatch = /<pre[^>]*>([\s\S]*?)<\/pre>/i.exec(bodyText);
+        if (preMatch) {
+          bodyText = preMatch[1]
+            .replace(/&quot;/g, '"')
+            .replace(/&amp;/g, "&")
+            .replace(/&lt;/g, "<")
+            .replace(/&gt;/g, ">");
+        }
+      } catch (err) {
+        firecrawlError = err instanceof Error ? err.message : String(err);
+      }
     }
 
-    const cloudflareBlocked =
-      bodyText.includes("Just a moment") ||
-      bodyText.includes("challenges.cloudflare.com") ||
-      bodyText.includes("Performing security verification");
 
     let rawCount = 0;
     let mapped: Array<{
@@ -210,8 +222,7 @@ export const scrapeMondialRelay = createServerFn({ method: "POST" })
       finishedAt: new Date().toISOString(),
       requestedUrl: url,
       httpStatus: status,
-      fetchError,
-      cloudflareBlocked,
+      firecrawlError,
       bodyBytes: bodyText.length,
       bodyPreview: bodyText.slice(0, 400),
       parseError,

@@ -4,7 +4,7 @@ import { lazy, Suspense, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { getMapData } from "@/lib/pickup-points.functions";
 import { scrapeMondialRelay } from "@/lib/mondial-relay.functions";
-import { ClientScrapeButton } from "@/components/ClientScrapeButton";
+
 
 const PickupMap = lazy(() =>
   import("@/components/PickupMap").then((m) => ({ default: m.PickupMap })),
@@ -87,13 +87,12 @@ function Index() {
       </Suspense>
 
       <div className="fixed bottom-4 right-4 z-[1000] flex max-w-md flex-col gap-2">
-        <ClientScrapeButton />
         <button
           onClick={run}
           disabled={loading}
           className="self-end rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-lg disabled:opacity-60"
         >
-          {loading ? "Import en cours…" : "Tester import Mondial Relay (75001)"}
+          {loading ? "Import en cours…" : "Importer Mondial Relay (75001) via Firecrawl"}
         </button>
         {err && (
           <pre className="max-h-72 overflow-auto rounded-md bg-destructive p-3 text-xs text-destructive-foreground shadow-lg">

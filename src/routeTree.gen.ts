@@ -10,33 +10,43 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ApiPublicRefreshPudosRouteImport } from './routes/api/public/refresh-pudos'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicRefreshPudosRoute = ApiPublicRefreshPudosRouteImport.update({
+  id: '/api/public/refresh-pudos',
+  path: '/api/public/refresh-pudos',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/api/public/refresh-pudos': typeof ApiPublicRefreshPudosRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/api/public/refresh-pudos': typeof ApiPublicRefreshPudosRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/api/public/refresh-pudos': typeof ApiPublicRefreshPudosRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/'
+  fullPaths: '/' | '/api/public/refresh-pudos'
   fileRoutesByTo: FileRoutesByTo
-  to: '/'
-  id: '__root__' | '/'
+  to: '/' | '/api/public/refresh-pudos'
+  id: '__root__' | '/' | '/api/public/refresh-pudos'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  ApiPublicRefreshPudosRoute: typeof ApiPublicRefreshPudosRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -48,11 +58,19 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/refresh-pudos': {
+      id: '/api/public/refresh-pudos'
+      path: '/api/public/refresh-pudos'
+      fullPath: '/api/public/refresh-pudos'
+      preLoaderRoute: typeof ApiPublicRefreshPudosRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  ApiPublicRefreshPudosRoute: ApiPublicRefreshPudosRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

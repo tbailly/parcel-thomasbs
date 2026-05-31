@@ -84,9 +84,11 @@ async function scrapeOnePostalCode(
   const actions: Array<Record<string, unknown>> = [
     { type: "wait", milliseconds: 3000 },
   ];
-  for (let i = 0; i < SHOW_MORE_CLICKS; i++) {
-    actions.push({ type: "executeJavascript", script: clickShowMoreScript });
-    actions.push({ type: "wait", milliseconds: 1800 });
+  if (opts.withActions) {
+    for (let i = 0; i < SHOW_MORE_CLICKS; i++) {
+      actions.push({ type: "executeJavascript", script: clickShowMoreScript });
+      actions.push({ type: "wait", milliseconds: 1800 });
+    }
   }
 
   try {

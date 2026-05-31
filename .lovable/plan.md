@@ -1,81 +1,48 @@
-## Constat
+## Objectif
+Tester depuis le navigateur de l'utilisateur (sans server function) si on peut appeler directement `https://www.mondialrelay.fr/api/parcelshop?...` pour récupérer les points relais. But : valider/invalider l'hypothèse "fetch côté client = ça passe" avant de basculer sur Firecrawl.
 
-Le site public mondialrelay.fr appelle son propre endpoint JSON `https://www.mondialrelay.fr/api/parcelshop?country=FR&postcode=75001&...` qui retourne **300 points** parfaitement structurés. Pas besoin de parser du HTML, ni de Firecrawl, ni de SOAP partenaire. Un simple `fetch` côté serveur avec un User-Agent navigateur passe Cloudflare (à valider en production, fallback Firecrawl si besoin plus tard).
+## Pourquoi on s'attend à un échec (mais on veut le voir)
+- Le navigateur de l'utilisateur résout naturellement le challenge Cloudflare et envoie le cookie `cf_clearance` → cette partie devrait passer.
+- **MAIS** l'endpoint `/api/parcelshop` ne renvoie quasi-certainement pas `Access-Control-Allow-Origin: *` → le navigateur va bloquer la réponse par CORS, **avant** même de te la livrer.
+- Si CORS bloque, on aura le message exact dans la console et un panneau d'erreur clair dans l'UI → on saura à 100 % qu'il faut passer par Firecrawl.
 
-## Ce qu'on change
+## Étapes
 
-### 1. `src/lib/mondial-relay.functions.ts` — réécriture
+### 1. Nouveau composant `src/components/ClientScrapeButton.tsx`
+Composant client autonome qui contient :
+- Un bouton **"Tester fetch direct (navigateur)"**
+- `useState` pour `loading`, `result`, `error`, `corsBlocked`, `rawResponse`
+- Au clic :
+  - construire l'URL `https://www.mondialrelay.fr/api/parcelshop?country=FR&postcode=75001&city=&services=&excludeSat=false&naturesAllowed=1,A,E,F,D,J,T,S,C`
+  - `fetch(url, { method: "GET", headers: { Accept: "application/json" }, mode: "cors", credentials: "omit" })`
+  - try/catch : si exception → message + flag `corsBlocked` (le navigateur jette `TypeError: Failed to fetch` typique du blocage CORS)
+  - si réponse OK → `res.json()` et affichage du nombre de points + 3 premiers samples
+  - logger le statut, les headers visibles (très limités en cross-origin), la taille de la réponse
 
-Remplacer le parseur HTML par un appel à l'endpoint JSON officiel.
+### 2. Intégrer dans `src/routes/index.tsx`
+Ajouter le nouveau bouton **à côté** de celui existant (server function). On garde les deux pour comparer :
+- "Tester fetch direct (navigateur)" → CORS attendu
+- "Tester import Mondial Relay (75001)" → server function actuelle
 
-- Entrée du job : `{ postalCode: string = "75001", country: "FR" }`.
-- Appel `GET https://www.mondialrelay.fr/api/parcelshop?country=FR&postcode={cp}&city=&services=&excludeSat=false&naturesAllowed=1,A,E,F,D,J,T,S,C` avec headers :
-  - `User-Agent` Chrome réaliste
-  - `Accept: application/json, text/plain, */*`
-  - `Accept-Language: fr-FR`
-  - `Referer: https://www.mondialrelay.fr/trouver-le-point-relais-le-plus-proche-de-chez-moi/`
-- Si status ≠ 200 ou réponse non-JSON → on renvoie quand même le diagnostic (status, preview, `cloudflareBlocked`) sans planter.
-- Validation Zod stricte de la réponse (tableau de points avec `Numero`, `Adresse{...}`, `Horaires[]`, `Conges[]`, `CodeNature`).
+Disposer les deux boutons l'un au-dessus de l'autre, même panneau de résultat / erreur.
 
-### 2. Mapping JSON → schéma DB
+### 3. Affichage diagnostic enrichi
+Quand l'appel échoue, afficher :
+- Le message d'erreur exact (`TypeError: Failed to fetch` → on l'interprète comme "CORS")
+- Un encart explicatif : "Si tu vois 'Failed to fetch', c'est CORS qui bloque côté navigateur. Vérifie la console (onglet réseau) pour confirmer le statut Cloudflare."
 
-Pour chaque point :
+### 4. Aucune écriture en DB
+Ce bouton-test **ne touche pas** à la base. Il affiche juste le JSON brut. Pas de DELETE / INSERT pickup_points.
 
-| Champ DB | Source |
-|---|---|
-| `provider_id` | `"mondial_relay"` |
-| `external_id` | `"mr-" + Numero` |
-| `name` | `Adresse.Libelle` |
-| `address` | `AdresseLigne1` + (`AdresseLigne2` si non vide) |
-| `postal_code` | `Adresse.CodePostal` |
-| `city` | `Adresse.Ville` |
-| `lat` / `lng` | `Adresse.Latitude` / `Adresse.Longitude` |
-| `opening_hours` | `Horaires[]` → JSONB `{mon:[{open,close},...], tue:[...], ...}` (JourSemaine 0=dim → 6=sam, slots AM puis PM si présents, journée fermée si tous les champs absents) |
-| `notes` | Composé : type (`Locker` si `CodeNature="C"`, sinon `Point Relais`) + congés actifs futurs au format `Fermé du JJ/MM au JJ/MM` (depuis `Conges[]`) + suffixe `EstPIS` si vrai |
+## Validation
+1. Cliquer "Tester fetch direct" → observer le résultat.
+2. Trois issues possibles :
+   - **CORS bloqué** (attendu) → `TypeError: Failed to fetch`, on enchaîne sur Firecrawl.
+   - **Cloudflare 403** → on voit le statut, peu probable car le navigateur a déjà ses cookies, mais possible.
+   - **Succès** (peu probable mais cool) → on a un tableau JSON, on saura qu'on peut tout faire côté client.
+3. Ouvrir l'onglet Réseau du navigateur pour voir la vraie raison (CORS preflight, 403, etc.).
 
-### 3. Insertion DB
-
-Inchangé sur le principe : transaction logique simple via `supabaseAdmin` :
-1. `DELETE FROM pickup_points WHERE provider_id='mondial_relay'`
-2. `INSERT` par batch unique de tous les points mappés.
-
-### 4. Front (`src/routes/index.tsx`)
-
-Aucun changement structurel — le bouton existant continue d'appeler `scrapeMondialRelay`. Juste renommer le libellé en **"Tester import Mondial Relay (75001)"** et passer `postalCode: "75001"` par défaut (au lieu de 93400) pour matcher la demande "Paris". Le panneau JSON résultat continue d'afficher : `httpStatus`, `parsedCount`, `inserted`, `dbError`, et un échantillon des points.
-
-### 5. Retour du job (JSON affiché dans l'UI)
-
-```ts
-{
-  startedAt, finishedAt,
-  requestedUrl,
-  httpStatus, fetchError,
-  cloudflareBlocked,           // heuristique sur "Just a moment" / challenge
-  rawCount,                    // taille du tableau JSON brut
-  mappedCount,                 // points valides après mapping
-  inserted, dbError,
-  samplePoints: points.slice(0, 5),  // pour ne pas saturer l'UI
-}
-```
-
-## Hors scope (ce ticket)
-
-- Itération multi-CP pour couvrir 75 + 92 + 93 (on reste sur un seul CP par appel pour le test manuel).
-- Branchement pg_cron (à faire dans un ticket dédié quand le mapping est validé).
-- Autres providers (Vinted Go, Chronopost, Shop2Shop).
-- Renommage du nom de la fonction `scrapeMondialRelay` (pour éviter de toucher à plus de surface).
-
-## Validation post-implémentation
-
-1. Cliquer le bouton sur `/` → loading → JSON affiché.
-2. Vérifier `httpStatus = 200`, `cloudflareBlocked = false`, `mappedCount ≈ 300`, `inserted ≈ 300`.
-3. Recharger la page : les pins Mondial Relay apparaissent sur la carte aux bonnes positions (75001 et alentours).
-4. Ouvrir un popup : nom, adresse, horaires de la journée corrects ; `notes` contient `Locker` ou `Point Relais` (+ congés si applicable).
-
-## Plan de repli si Cloudflare bloque depuis le Worker
-
-Si `httpStatus = 403` ou `cloudflareBlocked = true` en production :
-- Option A : passer par Firecrawl (connecteur Lovable) en réutilisant le même endpoint mais à travers leur navigateur headless.
-- Option B : déclencher l'import depuis un environnement non-edge (ex. exécution manuelle via `psql` côté toi, ou script local qui POSTe les données).
-
-À décider seulement si on constate effectivement le blocage.
+## Hors scope
+- Pas de migration Firecrawl dans ce ticket (plan déjà prêt pour après).
+- Pas de modif sur la server function existante.
+- Pas d'insertion en DB côté client.

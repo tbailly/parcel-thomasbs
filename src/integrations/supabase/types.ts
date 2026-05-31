@@ -14,7 +14,110 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      app_config: {
+        Row: {
+          center_address: string
+          center_lat: number
+          center_lng: number
+          default_zoom: number
+          id: number
+          updated_at: string
+        }
+        Insert: {
+          center_address: string
+          center_lat: number
+          center_lng: number
+          default_zoom?: number
+          id: number
+          updated_at?: string
+        }
+        Update: {
+          center_address?: string
+          center_lat?: number
+          center_lng?: number
+          default_zoom?: number
+          id?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      pickup_points: {
+        Row: {
+          address: string
+          city: string
+          external_id: string | null
+          id: string
+          lat: number
+          lng: number
+          name: string
+          notes: string | null
+          opening_hours: Json
+          postal_code: string
+          provider_id: string
+          updated_at: string
+        }
+        Insert: {
+          address: string
+          city: string
+          external_id?: string | null
+          id?: string
+          lat: number
+          lng: number
+          name: string
+          notes?: string | null
+          opening_hours?: Json
+          postal_code: string
+          provider_id: string
+          updated_at?: string
+        }
+        Update: {
+          address?: string
+          city?: string
+          external_id?: string | null
+          id?: string
+          lat?: number
+          lng?: number
+          name?: string
+          notes?: string | null
+          opening_hours?: Json
+          postal_code?: string
+          provider_id?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pickup_points_provider_id_fkey"
+            columns: ["provider_id"]
+            isOneToOne: false
+            referencedRelation: "providers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      providers: {
+        Row: {
+          color: string
+          created_at: string
+          id: string
+          logo_url: string
+          name: string
+        }
+        Insert: {
+          color: string
+          created_at?: string
+          id: string
+          logo_url: string
+          name: string
+        }
+        Update: {
+          color?: string
+          created_at?: string
+          id?: string
+          logo_url?: string
+          name?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

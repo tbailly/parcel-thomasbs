@@ -1,0 +1,1 @@
+ALTER VIEW public.latest_pickup_points SET (security_invoker = on);

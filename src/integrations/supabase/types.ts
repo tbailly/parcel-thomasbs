@@ -41,6 +41,42 @@ export type Database = {
         }
         Relationships: []
       }
+      home_addresses: {
+        Row: {
+          country: string
+          created_at: string
+          id: string
+          lat: number
+          lng: number
+          name: string
+          position: number
+          postal_code: string
+          updated_at: string
+        }
+        Insert: {
+          country?: string
+          created_at?: string
+          id?: string
+          lat: number
+          lng: number
+          name: string
+          position?: number
+          postal_code: string
+          updated_at?: string
+        }
+        Update: {
+          country?: string
+          created_at?: string
+          id?: string
+          lat?: number
+          lng?: number
+          name?: string
+          position?: number
+          postal_code?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       pickup_points: {
         Row: {
           address: string
@@ -54,6 +90,7 @@ export type Database = {
           opening_hours: Json
           postal_code: string
           provider_id: string
+          query_id: string | null
           updated_at: string
         }
         Insert: {
@@ -68,6 +105,7 @@ export type Database = {
           opening_hours?: Json
           postal_code: string
           provider_id: string
+          query_id?: string | null
           updated_at?: string
         }
         Update: {
@@ -82,6 +120,7 @@ export type Database = {
           opening_hours?: Json
           postal_code?: string
           provider_id?: string
+          query_id?: string | null
           updated_at?: string
         }
         Relationships: [
@@ -118,9 +157,76 @@ export type Database = {
         }
         Relationships: []
       }
+      queries: {
+        Row: {
+          created_at: string
+          error: string | null
+          finished_at: string | null
+          home_address_id: string | null
+          id: string
+          inserted_count: number
+          postal_code: string | null
+          provider_id: string
+          raw_count: number
+          started_at: string | null
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          error?: string | null
+          finished_at?: string | null
+          home_address_id?: string | null
+          id?: string
+          inserted_count?: number
+          postal_code?: string | null
+          provider_id: string
+          raw_count?: number
+          started_at?: string | null
+          status?: string
+        }
+        Update: {
+          created_at?: string
+          error?: string | null
+          finished_at?: string | null
+          home_address_id?: string | null
+          id?: string
+          inserted_count?: number
+          postal_code?: string | null
+          provider_id?: string
+          raw_count?: number
+          started_at?: string | null
+          status?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
-      [_ in never]: never
+      latest_pickup_points: {
+        Row: {
+          address: string | null
+          city: string | null
+          external_id: string | null
+          id: string | null
+          lat: number | null
+          lng: number | null
+          name: string | null
+          notes: string | null
+          opening_hours: Json | null
+          postal_code: string | null
+          provider_id: string | null
+          query_id: string | null
+          updated_at: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pickup_points_provider_id_fkey"
+            columns: ["provider_id"]
+            isOneToOne: false
+            referencedRelation: "providers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       [_ in never]: never

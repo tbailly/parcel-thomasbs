@@ -64,7 +64,7 @@ function Index() {
     setErr(null);
     setResult(null);
     try {
-      const res = await scrape({ data: { postalCode: "75001", country: "FR" } });
+      const res = await scrape({ data: {} });
       setResult(res);
       router.invalidate();
     } catch (e) {
@@ -92,7 +92,7 @@ function Index() {
           disabled={loading}
           className="self-end rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-lg disabled:opacity-60"
         >
-          {loading ? "Import en cours…" : "Importer Mondial Relay (75001) via Firecrawl"}
+          {loading ? "Import en cours…" : "Importer Mondial Relay (adresse maison)"}
         </button>
         {err && (
           <pre className="max-h-72 overflow-auto rounded-md bg-destructive p-3 text-xs text-destructive-foreground shadow-lg">

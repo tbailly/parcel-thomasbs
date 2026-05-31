@@ -4,6 +4,7 @@ import { lazy, Suspense, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { getMapData } from "@/lib/pickup-points.functions";
 import { scrapeMondialRelay } from "@/lib/mondial-relay.functions";
+import { ClientScrapeButton } from "@/components/ClientScrapeButton";
 
 const PickupMap = lazy(() =>
   import("@/components/PickupMap").then((m) => ({ default: m.PickupMap })),

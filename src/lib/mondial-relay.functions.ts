@@ -132,6 +132,14 @@ export const scrapeMondialRelay = createServerFn({ method: "POST" })
         const result = await firecrawl.scrape(url, {
           formats: ["rawHtml"],
           onlyMainContent: false,
+          headers: {
+            "User-Agent":
+              "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
+            Accept: "application/json, text/plain, */*",
+            "Accept-Language": "fr-FR,fr;q=0.9",
+            Referer:
+              "https://www.mondialrelay.fr/trouver-le-point-relais-le-plus-proche-de-chez-moi/",
+          },
         });
         const r = result as {
           rawHtml?: string;

@@ -1,56 +1,36 @@
+## Hypothèse à tester
 
-## Objectif
+Le run "changé extraction en Json" (169 points) utilisait un appel Firecrawl **sans `actions`** — juste `scrape(url, { formats: [{ type: "json", prompt, schema }], onlyMainContent: false, waitFor: 3000, location })`. Aucune tentative de clic "Afficher plus".
 
-1. Charger TOUTES les `home_addresses` (plus uniquement la 1re) et scraper Mondial Relay une fois par code postal.
-2. Sur chaque page MR, cliquer 5 fois sur « Afficher plus de résultats » via Firecrawl `actions` avant l'extraction JSON, pour ramener ~50-80 points au lieu de ~15.
-3. Fusionner tous les points de tous les CP dans **une seule** ligne `queries` (= un run), en dédoublonnant.
+La version actuelle a ajouté des `actions` (`executeJavascript` × 5 pour cliquer sur "Afficher plus"). Quand ces actions échouent côté Firecrawl, **tout le scrape est abandonné** — c'est ce qu'on voit dans les `queries` récentes (`err=Action(s) failed to complete ... ActionError: Element not found`).
 
-## 1. `scrapeMondialRelay` (src/lib/mondial-relay.functions.ts)
+Donc avant d'instrumenter quoi que ce soit, je veux **rejouer la requête originale telle quelle**, mais avec `93400` au lieu de `75001`, pour répondre à une question simple :
 
-### Chargement des adresses
-- Remplacer `.limit(1).maybeSingle()` par un `select` sans limite, ordonné `position asc, created_at asc`.
-- Si la liste est vide → ligne `queries` `status='error'`, `error='no home address configured'`, stop. (comportement actuel conservé.)
+- Est-ce que le 93400, sans clic "Afficher plus", donne ~13 points (limite réelle MR à cet endroit) ou ~150+ (alors le coupable c'est uniquement nos `actions`) ?
 
-### Une seule ligne `queries` par run
-- Créer 1 ligne `queries` au début (status `success` provisoire, `home_address_id = NULL`, `postal_code = NULL` car multi-CP, `started_at = now`).
-- Récupérer `queryId`.
-- Stocker la liste des CP scrapés dans `error` ? Non — plutôt laisser `postal_code` à `NULL` et lister les CP dans le diagnostic de retour uniquement. Pas de changement de schéma.
+## Étapes
 
-### Boucle sur les adresses
-Pour chaque `home`:
-1. Construire l'URL `?codePostal=${home.postal_code}&pays=${home.country}`.
-2. Appel Firecrawl `scrape` avec :
-   - `actions`: 5 fois `{ type: 'click', selector: '<sélecteur du bouton Afficher plus>' }` entrecoupés de `{ type: 'wait', milliseconds: 1500 }`. À défaut de sélecteur connu, on utilise `{ type: 'click', selector: 'button:has-text("Afficher plus")' }` ou un sélecteur CSS proche (à confirmer au runtime via le diagnostic).
-   - `waitFor: 3000` avant les actions, prompt JSON inchangé.
-3. Parser, mapper avec `query_id = queryId`.
+1. **Mode debug "scrape simple"**
+   - Ajouter dans la server fn une variante (paramètre `mode: "simple-93400"` ou flag) qui :
+     - n'utilise **aucune** `actions`,
+     - force le code postal `93400` (pays `FR`),
+     - garde exactement le même `prompt`, `schema`, `formats: [{ type: "json", ... }]`, `waitFor: 3000`, `onlyMainContent: false`, `location: { country: "FR", languages: ["fr-FR","fr"] }` qu'au run "changé extraction en Json".
+   - Cette variante reste **synchrone** dans la server fn (pas de `backgroundTask`) pour qu'on récupère le résultat directement et qu'on ne reste pas bloqué en `running`.
 
-### Dédoublonnage
-- Clé de dédoublonnage : `external_id` quand non vide, sinon `${round(lat,5)}|${round(lng,5)}`.
-- Map JS `Map<string, MappedPoint>` partagée entre les CP — premier vu gagne.
-- Compteurs : `rawPointCount` (somme brute tous CP), `insertedCount` (après dédoublonnage et insert).
+2. **Sécuriser la fin de job dans tous les cas**
+   - Même hors mode debug, si `runScrapeJob` lance ou plante, la ligne `queries` doit toujours finir en `success` ou `error` (try/catch global + `finally` update).
+   - Évite les `running` éternels comme `87ae1dfb-...`.
 
-### Insert + mise à jour de queries
-- Un seul `insert(mapped[], { count: 'exact' })` à la fin.
-- Update `queries` avec `raw_count`, `inserted_count`, `status`, `error` (concat des erreurs Firecrawl par CP si besoin), `finished_at`.
+3. **Diagnostic retourné**
+   - `rawCount`, `insertedCount`, échantillon des 3 premiers points, erreur Firecrawl brute si présente.
+   - Un bouton temporaire "Test 93400 simple" sur la page pour déclencher ce mode et voir le résultat à l'écran.
 
-### Diagnostic enrichi
-Retour : `queryId`, `addresses: [{ name, postal_code, rawCount, error? }]`, `totalRaw`, `totalUnique`, `insertedCount`, `sampleExtracted` (3 premiers), `dbError`.
+4. **Décision après le test**
+   - Si on obtient >>13 points sur 93400 : on supprime définitivement les `actions` (et on cherche un autre levier pour élargir si nécessaire — search radius dans le prompt, multi-CP autour).
+   - Si on obtient ~13 points : la limite vient réellement de la page MR pour ce CP, et il faudra une autre stratégie (zone élargie, plusieurs CP voisins).
 
-## 2. Hors scope
+## Hors scope
 
-- Pas de changement de schéma DB.
-- Pas de purge.
-- Pas de CRUD adresses en UI (tu ajoutes la 2e à la main via SQL comme la 1re).
-- `src/lib/pickup-points.functions.ts` et `src/routes/index.tsx` inchangés.
-
-## Points à valider
-
-- **Sélecteur du bouton « Afficher plus »** : je ne le connais pas avec certitude. Deux approches possibles :
-  - (a) Tenter un sélecteur générique `button:has-text("Afficher plus de résultats")` (syntaxe Playwright, supportée par Firecrawl).
-  - (b) Si ça ne marche pas, fallback `scroll` (Firecrawl `actions` supporte aussi `{ type: 'scroll', direction: 'down' }`) qui peut déclencher un load infinite.
-  Je pars sur (a) en premier, et on ajustera selon le diagnostic du 1er run.
-- Si 5 clics échouent silencieusement, on aura quand même les ~15 points de base — pas de régression.
-
-## Risque
-
-- Temps d'exécution : ~5 clics × 1.5 s × N adresses = ~7.5 s par CP en plus du scrape de base. Pour 2 CP, run total ~25-40 s. Acceptable côté server fn.
+- Pas de refonte des `actions`, pas de polling client, pas de changement de schéma DB.
+- Le mode multi-adresses / dédoublonnage existant reste tel quel pour le run normal.
+- Le bouton temporaire sera retiré ensuite.

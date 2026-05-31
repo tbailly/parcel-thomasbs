@@ -55,7 +55,9 @@ function Index() {
   const router = useRouter();
   const { data } = useSuspenseQuery(mapDataQueryOptions);
   const scrape = useServerFn(scrapeMondialRelay);
+  const scrapeDebug = useServerFn(scrapeMondialRelayDebug93400);
   const [loading, setLoading] = useState(false);
+  const [debugLoading, setDebugLoading] = useState(false);
   const [result, setResult] = useState<unknown>(null);
   const [err, setErr] = useState<string | null>(null);
 
@@ -71,6 +73,21 @@ function Index() {
       setErr(e instanceof Error ? e.message : String(e));
     } finally {
       setLoading(false);
+    }
+  };
+
+  const runDebug = async () => {
+    setDebugLoading(true);
+    setErr(null);
+    setResult(null);
+    try {
+      const res = await scrapeDebug({ data: {} });
+      setResult(res);
+      router.invalidate();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setDebugLoading(false);
     }
   };
 

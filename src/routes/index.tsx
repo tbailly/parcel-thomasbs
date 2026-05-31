@@ -3,7 +3,7 @@ import { queryOptions, useSuspenseQuery } from "@tanstack/react-query";
 import { lazy, Suspense, useState } from "react";
 import { useServerFn } from "@tanstack/react-start";
 import { getMapData } from "@/lib/pickup-points.functions";
-import { scrapeMondialRelay } from "@/lib/mondial-relay.functions";
+import { scrapeMondialRelay, scrapeMondialRelayDebug93400 } from "@/lib/mondial-relay.functions";
 
 
 const PickupMap = lazy(() =>
@@ -55,7 +55,9 @@ function Index() {
   const router = useRouter();
   const { data } = useSuspenseQuery(mapDataQueryOptions);
   const scrape = useServerFn(scrapeMondialRelay);
+  const scrapeDebug = useServerFn(scrapeMondialRelayDebug93400);
   const [loading, setLoading] = useState(false);
+  const [debugLoading, setDebugLoading] = useState(false);
   const [result, setResult] = useState<unknown>(null);
   const [err, setErr] = useState<string | null>(null);
 
@@ -71,6 +73,21 @@ function Index() {
       setErr(e instanceof Error ? e.message : String(e));
     } finally {
       setLoading(false);
+    }
+  };
+
+  const runDebug = async () => {
+    setDebugLoading(true);
+    setErr(null);
+    setResult(null);
+    try {
+      const res = await scrapeDebug({ data: {} });
+      setResult(res);
+      router.invalidate();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setDebugLoading(false);
     }
   };
 
@@ -93,6 +110,13 @@ function Index() {
           className="self-end rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-lg disabled:opacity-60"
         >
           {loading ? "Import en cours…" : "Importer Mondial Relay (adresse maison)"}
+        </button>
+        <button
+          onClick={runDebug}
+          disabled={debugLoading}
+          className="self-end rounded-md bg-secondary px-4 py-2 text-sm font-medium text-secondary-foreground shadow-lg disabled:opacity-60"
+        >
+          {debugLoading ? "Test 93400 en cours…" : "Test 93400 simple (sans actions)"}
         </button>
         {err && (
           <pre className="max-h-72 overflow-auto rounded-md bg-destructive p-3 text-xs text-destructive-foreground shadow-lg">

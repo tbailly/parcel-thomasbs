@@ -63,7 +63,7 @@ function Index() {
     setErr(null);
     setResult(null);
     try {
-      const res = await scrape({ data: { postalCode: "93400", nbResults: 15 } });
+      const res = await scrape({ data: { postalCode: "75001", country: "FR" } });
       setResult(res);
       router.invalidate();
     } catch (e) {

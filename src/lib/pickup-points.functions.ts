@@ -35,7 +35,7 @@ export const getMapData = createServerFn({ method: "GET" }).handler(async () => 
   const [providersRes, pointsRes, configRes] = await Promise.all([
     supabaseAdmin.from("providers").select("id, name, logo_url, color"),
     supabaseAdmin
-      .from("pickup_points")
+      .from("latest_pickup_points")
       .select("id, provider_id, name, address, postal_code, city, lat, lng, opening_hours, notes"),
     supabaseAdmin
       .from("app_config")

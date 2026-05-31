@@ -18,31 +18,73 @@ type MappedPoint = {
   lng: number;
   opening_hours: OpeningHours;
   notes: string | null;
+  query_id: string;
 };
 
-/**
- * Étape 1+2 du plan : on abandonne l'endpoint JSON /api/parcelshop (toujours bloqué
- * par le WAF même via Firecrawl + headers navigateur) et on scrape la page publique
- * Mondial Relay. On récupère rawHtml/html avec waitFor et on extrait les points
- * depuis le DOM rendu. Le diagnostic retourné permet d'itérer sur les sélecteurs.
- */
+const PROVIDER_ID = "mondial_relay";
+
 export const scrapeMondialRelay = createServerFn({ method: "POST" })
-  .inputValidator((input) =>
-    z
-      .object({
-        postalCode: z.string().regex(/^\d{5}$/).default("75001"),
-        country: z.string().length(2).default("FR"),
-      })
-      .parse(input ?? {}),
-  )
-  .handler(async ({ data }) => {
-    const url = `https://www.mondialrelay.fr/trouver-le-point-relais-le-plus-proche-de-chez-moi/?codePostal=${data.postalCode}&pays=${data.country}`;
+  .inputValidator((input) => z.object({}).parse(input ?? {}))
+  .handler(async () => {
     const startedAt = new Date().toISOString();
 
-    let status = 0;
-    let firecrawlError: string | null = null;
-    let extracted: unknown = null;
-    let htmlBytes = 0;
+    // 1. Charger l'adresse maison
+    const { data: home, error: homeErr } = await supabaseAdmin
+      .from("home_addresses")
+      .select("id, name, postal_code, country, lat, lng")
+      .order("position", { ascending: true })
+      .order("created_at", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+
+    if (homeErr || !home) {
+      const errorMessage = homeErr?.message ?? "no home address configured";
+      const { data: qRow } = await supabaseAdmin
+        .from("queries")
+        .insert({
+          provider_id: PROVIDER_ID,
+          status: "error",
+          error: errorMessage,
+          started_at: startedAt,
+          finished_at: new Date().toISOString(),
+        })
+        .select("id")
+        .single();
+      return {
+        startedAt,
+        finishedAt: new Date().toISOString(),
+        queryId: qRow?.id ?? null,
+        error: errorMessage,
+        rawPointCount: 0,
+        insertedCount: 0,
+      };
+    }
+
+    // 2. Créer la ligne queries
+    const { data: qRow, error: qErr } = await supabaseAdmin
+      .from("queries")
+      .insert({
+        provider_id: PROVIDER_ID,
+        home_address_id: home.id,
+        postal_code: home.postal_code,
+        status: "success",
+        started_at: startedAt,
+      })
+      .select("id")
+      .single();
+
+    if (qErr || !qRow) {
+      return {
+        startedAt,
+        finishedAt: new Date().toISOString(),
+        error: `queries insert: ${qErr?.message ?? "unknown"}`,
+        rawPointCount: 0,
+        insertedCount: 0,
+      };
+    }
+    const queryId = qRow.id as string;
+
+    const url = `https://www.mondialrelay.fr/trouver-le-point-relais-le-plus-proche-de-chez-moi/?codePostal=${home.postal_code}&pays=${home.country}`;
 
     const PointJsonSchema = z.object({
       points: z
@@ -61,6 +103,11 @@ export const scrapeMondialRelay = createServerFn({ method: "POST" })
         )
         .default([]),
     });
+
+    let status = 0;
+    let firecrawlError: string | null = null;
+    let extracted: unknown = null;
+    let htmlBytes = 0;
 
     const apiKey = process.env.FIRECRAWL_API_KEY;
     if (!apiKey) {
@@ -136,8 +183,8 @@ export const scrapeMondialRelay = createServerFn({ method: "POST" })
           const p = parsed.points[i];
           if (!Number.isFinite(p.lat) || !Number.isFinite(p.lng)) continue;
           mapped.push({
-            provider_id: "mondial_relay",
-            external_id: p.external_id?.trim() || `mr-${data.postalCode}-${i}`,
+            provider_id: PROVIDER_ID,
+            external_id: p.external_id?.trim() || `mr-${home.postal_code}-${queryId.slice(0, 8)}-${i}`,
             name: p.name,
             address: p.address,
             postal_code: p.postal_code,
@@ -148,6 +195,7 @@ export const scrapeMondialRelay = createServerFn({ method: "POST" })
             notes:
               [p.notes, p.opening_hours_text].filter(Boolean).join(" · ") ||
               null,
+            query_id: queryId,
           });
         }
       } catch (err) {
@@ -158,35 +206,43 @@ export const scrapeMondialRelay = createServerFn({ method: "POST" })
     let inserted = 0;
     let dbError: string | null = null;
     if (mapped.length > 0) {
-      const { error: delErr } = await supabaseAdmin
+      const { error: insErr, count } = await supabaseAdmin
         .from("pickup_points")
-        .delete()
-        .eq("provider_id", "mondial_relay");
-      if (delErr) {
-        dbError = `delete: ${delErr.message}`;
-      } else {
-        const { error: insErr, count } = await supabaseAdmin
-          .from("pickup_points")
-          .insert(mapped, { count: "exact" });
-        if (insErr) dbError = `insert: ${insErr.message}`;
-        else inserted = count ?? mapped.length;
-      }
+        .insert(mapped, { count: "exact" });
+      if (insErr) dbError = `insert: ${insErr.message}`;
+      else inserted = count ?? mapped.length;
     }
+
+    const finishedAt = new Date().toISOString();
+    const hadError = Boolean(firecrawlError || parseError || dbError);
+    await supabaseAdmin
+      .from("queries")
+      .update({
+        status: hadError ? "error" : "success",
+        raw_count: rawPointCount,
+        inserted_count: inserted,
+        error: hadError
+          ? [firecrawlError, parseError, dbError].filter(Boolean).join(" | ")
+          : null,
+        finished_at: finishedAt,
+      })
+      .eq("id", queryId);
 
     return {
       startedAt,
-      finishedAt: new Date().toISOString(),
-      sourceType: "public-page-json" as const,
+      finishedAt,
+      queryId,
+      centerName: home.name,
+      centerPostalCode: home.postal_code,
       requestedUrl: url,
       httpStatus: status,
       firecrawlError,
       htmlBytes,
       parseError,
       rawPointCount,
-      mappedCount: mapped.length,
+      insertedCount: inserted,
       sampleExtracted: mapped.slice(0, 3),
       extractedPreview: JSON.stringify(extracted).slice(0, 600),
-      inserted,
       dbError,
     };
   });

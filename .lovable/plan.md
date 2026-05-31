@@ -1,61 +1,83 @@
-# Migration Mondial Relay → Firecrawl
+# Mondial Relay — diagnostic actuel et plan de correction
 
-## Objectif
-Remplacer le `fetch` direct (bloqué par Cloudflare depuis le Worker) par un appel Firecrawl qui résout le challenge et retourne le JSON brut de l'endpoint `/api/parcelshop`. La logique de parsing / mapping / insertion DB reste identique.
+## Ce qui bouge dans les derniers logs
 
-## Étapes
+### 1. Le server function s'exécute bien, mais la source Mondial Relay reste bloquée
+- La requête `POST /_serverFn/...scrapeMondialRelay...` répond **200 côté app**.
+- Le diagnostic renvoyé par la fonction montre toutefois :
+  - `httpStatus: 401`
+  - `firecrawlError: null`
+  - `bodyBytes: 2081`
+  - `bodyPreview: <html xmlns="http://www.w3.org/1999/xhtml">...`
+  - `rawCount: 0`
+  - `mappedCount: 0`
+  - `inserted: 0`
+- Conclusion : **le code applicatif ne plante pas**, mais Firecrawl reçoit encore une **page de blocage HTML/XML** à la place du JSON Mondial Relay.
 
-### 1. Connecter Firecrawl
-- Lancer `standard_connectors--connect` avec `connector_id: firecrawl` pour brancher le connecteur (plan gratuit Firecrawl = 500 scrapes/mois, largement suffisant).
-- Vérifier que `FIRECRAWL_API_KEY` est bien dispo côté serveur via `fetch_secrets`.
+### 2. L'ajout des headers navigateur n'a pas suffi
+- Les headers `User-Agent`, `Accept`, `Accept-Language` et `Referer` sont bien présents dans `src/lib/mondial-relay.functions.ts`.
+- Malgré ça, la réponse reste `401` avec un body HTML.
+- Conclusion : **le blocage n'est pas un problème de parsing ni de credentials**, mais très probablement un filtrage anti-bot/WAF toujours actif sur l'endpoint `/api/parcelshop`.
 
-### 2. Installer le SDK
-- `bun add @mendable/firecrawl-js`
+### 3. Les points visibles sur la carte restent des données de démo
+- Les requêtes `getMapData` renvoient encore des entrées `Fake - ...`.
+- C'est cohérent avec `inserted: 0` sur l'import Mondial Relay : rien de nouveau n'est inséré, donc la carte continue d'afficher le dataset existant.
 
-### 3. Réécrire `src/lib/mondial-relay.functions.ts`
-Garder la même signature de server function (`scrapeMondialRelay`), même input (`postalCode`, `country`), même retour (diagnostic + sample). Seul le bloc `fetch(...)` est remplacé.
+### 4. Il y a aussi un problème séparé côté carte SSR
+- Les logs Vite montrent `ReferenceError: window is not defined` provenant de `leaflet` dans `src/components/PickupMap.tsx`.
+- Cause probable : `leaflet` est importé au niveau module alors que le rendu serveur essaie aussi de charger le composant.
+- Ce bug n'explique pas le `401` Mondial Relay, mais il faut le corriger pour fiabiliser la page.
 
-Remplacement :
-```ts
-import Firecrawl from "@mendable/firecrawl-js";
+### 5. Le bruit `ClientScrapeButton.tsx` est historique
+- Les logs Vite montrent aussi une ancienne erreur d'import sur `ClientScrapeButton.tsx` supprimé.
+- Le fichier `src/routes/index.tsx` ne l'importe plus, donc **ce n'est plus le blocage principal**.
 
-const firecrawl = new Firecrawl({ apiKey: process.env.FIRECRAWL_API_KEY! });
-const result = await firecrawl.scrape(url, {
-  formats: ["rawHtml"],   // l'endpoint renvoie du JSON pur, on récupère le body brut
-  onlyMainContent: false,
-});
-// Firecrawl renvoie le contenu dans result.rawHtml (ou result.html)
-// Pour un endpoint JSON, le body est directement dans rawHtml en string
-bodyText = result.rawHtml ?? result.html ?? "";
-status = result.metadata?.statusCode ?? 200;
-```
+## Plan de correction
 
-Conserver :
-- `ResponseSchema` Zod et toute la logique `buildHours` / `buildNotes` / mapping
-- Le DELETE + INSERT en DB sur `provider_id = "mondial_relay"`
-- Le retour de diagnostic (httpStatus, bodyPreview, rawCount, mappedCount, inserted, samplePoints)
+### Étape 1 — Abandonner l'appel direct à `/api/parcelshop`
+Ne plus considérer l'endpoint JSON Mondial Relay comme source primaire, car il reste bloqué même via Firecrawl avec headers navigateur.
 
-Ajouter au diagnostic :
-- `firecrawlError: string | null` si l'appel SDK throw
-- Retirer `cloudflareBlocked` (plus pertinent) ou le garder mais toujours `false`
+### Étape 2 — Basculer vers la page publique Mondial Relay
+Remplacer la stratégie de scraping par un scrape de la page publique :
 
-### 4. Nettoyage UI
-- Supprimer `src/components/ClientScrapeButton.tsx` (test obsolète, CORS confirmé bloquant)
-- Retirer son import et son usage dans `src/routes/index.tsx`
-- Renommer le bouton restant en **"Importer Mondial Relay (75001) via Firecrawl"**
+`https://www.mondialrelay.fr/trouver-le-point-relais-le-plus-proche-de-chez-moi/?codePostal=75001&pays=FR`
 
-### 5. Validation
-1. Cliquer le bouton → s'attendre à `httpStatus: 200`, `rawCount > 0`, `inserted > 0`.
-2. Recharger la carte → les points 75001 doivent apparaître.
-3. Vérifier dans le panneau JSON qu'il n'y a pas de `firecrawlError` ni `parseError`.
+Approche :
+- utiliser Firecrawl sur cette URL publique ;
+- récupérer `rawHtml` et/ou `html` avec `waitFor` ;
+- parser le DOM rendu pour extraire les cartes/listes de points relais ;
+- mapper ce résultat vers le format `pickup_points` existant.
 
-## Hors scope
-- Pas de changement du schéma DB.
-- Pas d'extension aux autres codes postaux (on garde 75001 pour le test, on généralisera après validation).
-- Pas de gestion de credits Firecrawl (le plan gratuit suffit pour quelques scrapes/mois).
+### Étape 3 — Renforcer le diagnostic du scrape
+Faire évoluer le retour de `scrapeMondialRelay` pour distinguer clairement :
+- `sourceType: "api" | "public-page"`
+- `httpStatus`
+- `contentType` détecté
+- `blocked: boolean`
+- `selectorHits` ou nombre de cartes HTML trouvées
+- `sampleExtracted` avant insertion DB
 
-## Détails techniques
+Objectif : savoir immédiatement si on a reçu du HTML utile ou encore une page de blocage.
 
-**Pourquoi `rawHtml` et pas `json` ou `markdown`** : l'URL cible est un endpoint API qui renvoie du JSON, pas une page HTML. Firecrawl récupère le corps brut de la réponse ; on le passe ensuite à `JSON.parse` comme avant. Le format `markdown` essaierait de convertir, le format `json` (extraction LLM) est inutile et coûteux ici.
+### Étape 4 — Corriger le bug Leaflet côté SSR
+Rendre `PickupMap` strictement client-only :
+- soit en déplaçant les imports `leaflet` dans un chargement côté client ;
+- soit en isolant la carte dans un module client qui ne s'exécute pas au rendu serveur.
 
-**Coût** : 1 scrape Firecrawl = 1 credit. Le plan gratuit donne 500 credits/mois, soit ~16 scrapes/jour. Largement au-dessus du besoin "quelques scrapes/mois".
+Objectif : supprimer les `window is not defined` et éviter que le debug scrape soit pollué par un deuxième problème.
+
+### Étape 5 — Valider avec un vrai cycle de test
+Après correction :
+1. cliquer sur le bouton d'import ;
+2. vérifier que le diagnostic montre soit des cartes HTML trouvées, soit des points extraits ;
+3. vérifier `mappedCount > 0` et `inserted > 0` ;
+4. recharger les données carte ;
+5. confirmer que les points Mondial Relay réels remplacent les entrées `Fake - ...`.
+
+## Hors scope immédiat
+- généralisation à tous les codes postaux ;
+- ajout d'autres sources transporteurs ;
+- refonte UI de la carte.
+
+## Décision recommandée
+Le prochain correctif doit viser **le scraping de la page publique Mondial Relay**, pas l'endpoint `/api/parcelshop`, puis **corriger Leaflet en SSR** pour stabiliser l'écran.

@@ -91,7 +91,7 @@ function Index() {
           disabled={loading}
           className="self-end rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-lg disabled:opacity-60"
         >
-          {loading ? "Scraping en cours…" : "Tester scrape Mondial Relay (93400)"}
+          {loading ? "Import en cours…" : "Tester import Mondial Relay (75001)"}
         </button>
         {err && (
           <pre className="max-h-72 overflow-auto rounded-md bg-destructive p-3 text-xs text-destructive-foreground shadow-lg">

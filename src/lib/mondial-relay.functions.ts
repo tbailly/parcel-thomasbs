@@ -3,102 +3,29 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { z } from "zod";
 import Firecrawl from "@mendable/firecrawl-js";
 
-
 type DayKey = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
 type OpeningSlot = { open: string; close: string };
 type OpeningHours = Partial<Record<DayKey, OpeningSlot[]>>;
 
-// JourSemaine MR : 0 = dimanche, 1 = lundi, …, 6 = samedi
-const DAY_BY_INDEX: Record<number, DayKey> = {
-  0: "sun",
-  1: "mon",
-  2: "tue",
-  3: "wed",
-  4: "thu",
-  5: "fri",
-  6: "sat",
+type MappedPoint = {
+  provider_id: string;
+  external_id: string;
+  name: string;
+  address: string;
+  postal_code: string;
+  city: string;
+  lat: number;
+  lng: number;
+  opening_hours: OpeningHours;
+  notes: string | null;
 };
 
-const HoraireSchema = z.object({
-  JourSemaine: z.number().int().min(0).max(6),
-  HeureOuvertureAM: z.string().optional(),
-  HeureFermetureAM: z.string().optional(),
-  HeureOuverturePM: z.string().optional(),
-  HeureFermeturePM: z.string().optional(),
-});
-
-const CongeSchema = z.object({
-  Debut: z.string(),
-  Fin: z.string(),
-});
-
-const PointSchema = z.object({
-  Numero: z.number(),
-  Adresse: z.object({
-    Libelle: z.string(),
-    LibelleComplement: z.string().optional().default(""),
-    AdresseLigne1: z.string(),
-    AdresseLigne2: z.string().optional().default(""),
-    CodePostal: z.string(),
-    Ville: z.string(),
-    Latitude: z.number(),
-    Longitude: z.number(),
-  }),
-  Conges: z.array(CongeSchema).default([]),
-  Horaires: z.array(HoraireSchema).default([]),
-  EstPIS: z.boolean().optional().default(false),
-  CodeNature: z.string().optional().default(""),
-});
-
-const ResponseSchema = z.array(PointSchema);
-
-function trimHHmm(s: string | undefined): string | null {
-  if (!s) return null;
-  const m = /^(\d{1,2}):(\d{2})/.exec(s);
-  if (!m) return null;
-  return `${m[1].padStart(2, "0")}:${m[2]}`;
-}
-
-function buildHours(horaires: z.infer<typeof HoraireSchema>[]): OpeningHours {
-  const hours: OpeningHours = {};
-  for (const h of horaires) {
-    const key = DAY_BY_INDEX[h.JourSemaine];
-    if (!key) continue;
-    const slots: OpeningSlot[] = [];
-    const amO = trimHHmm(h.HeureOuvertureAM);
-    const amC = trimHHmm(h.HeureFermetureAM);
-    const pmO = trimHHmm(h.HeureOuverturePM);
-    const pmC = trimHHmm(h.HeureFermeturePM);
-    if (amO && amC) slots.push({ open: amO, close: amC });
-    if (pmO && pmC) slots.push({ open: pmO, close: pmC });
-    if (slots.length) hours[key] = slots;
-  }
-  return hours;
-}
-
-function formatFrDate(iso: string): string {
-  const d = new Date(iso);
-  if (Number.isNaN(d.getTime())) return iso;
-  const dd = String(d.getUTCDate()).padStart(2, "0");
-  const mm = String(d.getUTCMonth() + 1).padStart(2, "0");
-  return `${dd}/${mm}`;
-}
-
-function buildNotes(p: z.infer<typeof PointSchema>): string | null {
-  const parts: string[] = [];
-  parts.push(p.CodeNature === "C" ? "Locker" : "Point Relais");
-  const now = Date.now();
-  const activeConges = p.Conges.filter((c) => {
-    const fin = new Date(c.Fin).getTime();
-    return Number.isFinite(fin) && fin >= now;
-  });
-  for (const c of activeConges) {
-    parts.push(`Fermé du ${formatFrDate(c.Debut)} au ${formatFrDate(c.Fin)}`);
-  }
-  if (p.EstPIS) parts.push("PIS");
-  return parts.join(" · ");
-}
-
+/**
+ * Étape 1+2 du plan : on abandonne l'endpoint JSON /api/parcelshop (toujours bloqué
+ * par le WAF même via Firecrawl + headers navigateur) et on scrape la page publique
+ * Mondial Relay. On récupère rawHtml/html avec waitFor et on extrait les points
+ * depuis le DOM rendu. Le diagnostic retourné permet d'itérer sur les sélecteurs.
+ */
 export const scrapeMondialRelay = createServerFn({ method: "POST" })
   .inputValidator((input) =>
     z
@@ -109,20 +36,16 @@ export const scrapeMondialRelay = createServerFn({ method: "POST" })
       .parse(input ?? {}),
   )
   .handler(async ({ data }) => {
-    const params = new URLSearchParams({
-      country: data.country,
-      postcode: data.postalCode,
-      city: "",
-      services: "",
-      excludeSat: "false",
-      naturesAllowed: "1,A,E,F,D,J,T,S,C",
-    });
-    const url = `https://www.mondialrelay.fr/api/parcelshop?${params.toString()}`;
+    const url = `https://www.mondialrelay.fr/trouver-le-point-relais-le-plus-proche-de-chez-moi/?codePostal=${data.postalCode}&pays=${data.country}`;
     const startedAt = new Date().toISOString();
 
     let status = 0;
-    let bodyText = "";
+    let html = "";
+    let rawHtml = "";
+    let markdown = "";
+    let contentType: string | null = null;
     let firecrawlError: string | null = null;
+
     const apiKey = process.env.FIRECRAWL_API_KEY;
     if (!apiKey) {
       firecrawlError = "FIRECRAWL_API_KEY is not configured";
@@ -130,81 +53,86 @@ export const scrapeMondialRelay = createServerFn({ method: "POST" })
       try {
         const firecrawl = new Firecrawl({ apiKey });
         const result = await firecrawl.scrape(url, {
-          formats: ["rawHtml"],
+          formats: ["html", "rawHtml", "markdown"],
           onlyMainContent: false,
-          headers: {
-            "User-Agent":
-              "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36",
-            Accept: "application/json, text/plain, */*",
-            "Accept-Language": "fr-FR,fr;q=0.9",
-            Referer:
-              "https://www.mondialrelay.fr/trouver-le-point-relais-le-plus-proche-de-chez-moi/",
-          },
+          waitFor: 4000,
+          location: { country: "FR", languages: ["fr-FR", "fr"] },
         });
         const r = result as {
-          rawHtml?: string;
           html?: string;
-          metadata?: { statusCode?: number };
-          data?: { rawHtml?: string; html?: string; metadata?: { statusCode?: number } };
+          rawHtml?: string;
+          markdown?: string;
+          metadata?: { statusCode?: number; contentType?: string };
+          data?: {
+            html?: string;
+            rawHtml?: string;
+            markdown?: string;
+            metadata?: { statusCode?: number; contentType?: string };
+          };
         };
-        bodyText = r.rawHtml ?? r.html ?? r.data?.rawHtml ?? r.data?.html ?? "";
-        status = r.metadata?.statusCode ?? r.data?.metadata?.statusCode ?? (bodyText ? 200 : 0);
-        // Firecrawl wraps JSON responses in <html><body><pre>…</pre></body></html>; extract <pre>
-        const preMatch = /<pre[^>]*>([\s\S]*?)<\/pre>/i.exec(bodyText);
-        if (preMatch) {
-          bodyText = preMatch[1]
-            .replace(/&quot;/g, '"')
-            .replace(/&amp;/g, "&")
-            .replace(/&lt;/g, "<")
-            .replace(/&gt;/g, ">");
-        }
+        html = r.html ?? r.data?.html ?? "";
+        rawHtml = r.rawHtml ?? r.data?.rawHtml ?? "";
+        markdown = r.markdown ?? r.data?.markdown ?? "";
+        status =
+          r.metadata?.statusCode ??
+          r.data?.metadata?.statusCode ??
+          (html || rawHtml ? 200 : 0);
+        contentType =
+          r.metadata?.contentType ?? r.data?.metadata?.contentType ?? null;
       } catch (err) {
         firecrawlError = err instanceof Error ? err.message : String(err);
       }
     }
 
+    const domSource = html || rawHtml;
+    const blocked =
+      status === 401 ||
+      status === 403 ||
+      /access denied|just a moment|attention required|datadome|captcha/i.test(
+        domSource.slice(0, 4000),
+      );
 
-    let rawCount = 0;
-    let mapped: Array<{
-      provider_id: string;
-      external_id: string;
-      name: string;
-      address: string;
-      postal_code: string;
-      city: string;
-      lat: number;
-      lng: number;
-      opening_hours: OpeningHours;
-      notes: string | null;
-    }> = [];
-    let parseError: string | null = null;
+    // Heuristique de comptage : on essaie quelques sélecteurs/patterns connus
+    // pour mesurer si le DOM contient des cartes points relais.
+    const selectorHits: Record<string, number> = {
+      "data-relayid": (domSource.match(/data-relayid=/gi) || []).length,
+      "class~=relay-item": (domSource.match(/class="[^"]*relay-item/gi) || [])
+        .length,
+      "class~=parcelshop": (domSource.match(/class="[^"]*parcelshop/gi) || [])
+        .length,
+      "class~=point-relais": (domSource.match(/class="[^"]*point-relais/gi) ||
+        []).length,
+      "lat-attr": (domSource.match(/data-lat=/gi) || []).length,
+    };
 
-    if (status === 200 && bodyText) {
-      try {
-        const json = JSON.parse(bodyText);
-        const parsed = ResponseSchema.parse(json);
-        rawCount = parsed.length;
-        mapped = parsed.map((p) => {
-          const line2 = p.Adresse.AdresseLigne2?.trim();
-          const address = line2
-            ? `${p.Adresse.AdresseLigne1} ${line2}`
-            : p.Adresse.AdresseLigne1;
-          return {
-            provider_id: "mondial_relay",
-            external_id: `mr-${p.Numero}`,
-            name: p.Adresse.Libelle,
-            address,
-            postal_code: p.Adresse.CodePostal,
-            city: p.Adresse.Ville,
-            lat: p.Adresse.Latitude,
-            lng: p.Adresse.Longitude,
-            opening_hours: buildHours(p.Horaires),
-            notes: buildNotes(p),
-          };
-        });
-      } catch (err) {
-        parseError = err instanceof Error ? err.message : String(err);
-      }
+    // Extraction best-effort : on cherche les blocs avec data-lat / data-lng / data-relayid.
+    // Si la page rendue ne les expose pas (SPA non hydratée par Firecrawl), on le verra
+    // dans selectorHits = 0 partout et on saura qu'il faut une autre stratégie.
+    const mapped: MappedPoint[] = [];
+    const cardRegex =
+      /<[^>]+data-relayid="([^"]+)"[^>]*data-lat="([^"]+)"[^>]*data-lng="([^"]+)"[^>]*>([\s\S]*?)<\/[a-z]+>/gi;
+    let m: RegExpExecArray | null;
+    while ((m = cardRegex.exec(domSource)) !== null) {
+      const id = m[1];
+      const lat = Number(m[2]);
+      const lng = Number(m[3]);
+      const inner = m[4];
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
+      const text = inner.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+      const cpMatch = /\b(\d{5})\b/.exec(text);
+      const postalCode = cpMatch ? cpMatch[1] : data.postalCode;
+      mapped.push({
+        provider_id: "mondial_relay",
+        external_id: `mr-${id}`,
+        name: text.slice(0, 80) || `Point ${id}`,
+        address: text.slice(0, 200),
+        postal_code: postalCode,
+        city: "",
+        lat,
+        lng,
+        opening_hours: {},
+        notes: "Point Relais (scrape page publique)",
+      });
     }
 
     let inserted = 0;
@@ -228,16 +156,21 @@ export const scrapeMondialRelay = createServerFn({ method: "POST" })
     return {
       startedAt,
       finishedAt: new Date().toISOString(),
+      sourceType: "public-page" as const,
       requestedUrl: url,
       httpStatus: status,
+      contentType,
+      blocked,
       firecrawlError,
-      bodyBytes: bodyText.length,
-      bodyPreview: bodyText.slice(0, 400),
-      parseError,
-      rawCount,
+      htmlBytes: html.length,
+      rawHtmlBytes: rawHtml.length,
+      markdownBytes: markdown.length,
+      htmlPreview: domSource.slice(0, 600),
+      markdownPreview: markdown.slice(0, 600),
+      selectorHits,
       mappedCount: mapped.length,
+      sampleExtracted: mapped.slice(0, 3),
       inserted,
       dbError,
-      samplePoints: mapped.slice(0, 5),
     };
   });

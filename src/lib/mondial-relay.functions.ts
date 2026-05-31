@@ -40,11 +40,27 @@ export const scrapeMondialRelay = createServerFn({ method: "POST" })
     const startedAt = new Date().toISOString();
 
     let status = 0;
-    let html = "";
-    let rawHtml = "";
-    let markdown = "";
-    let contentType: string | null = null;
     let firecrawlError: string | null = null;
+    let extracted: unknown = null;
+    let htmlBytes = 0;
+
+    const PointJsonSchema = z.object({
+      points: z
+        .array(
+          z.object({
+            external_id: z.string().nullable().optional(),
+            name: z.string(),
+            address: z.string(),
+            postal_code: z.string(),
+            city: z.string(),
+            lat: z.number(),
+            lng: z.number(),
+            opening_hours_text: z.string().nullable().optional(),
+            notes: z.string().nullable().optional(),
+          }),
+        )
+        .default([]),
+    });
 
     const apiKey = process.env.FIRECRAWL_API_KEY;
     if (!apiKey) {
@@ -53,86 +69,90 @@ export const scrapeMondialRelay = createServerFn({ method: "POST" })
       try {
         const firecrawl = new Firecrawl({ apiKey });
         const result = await firecrawl.scrape(url, {
-          formats: ["html", "rawHtml", "markdown"],
+          formats: [
+            {
+              type: "json",
+              prompt:
+                "Extract EVERY Mondial Relay pickup point (point relais / parcelshop) visible on this page (there should be several around the given postal code). For each, return: external_id (relay code/id if visible, else null), name (shop name), address (street line), postal_code (5 digits), city, lat (latitude decimal), lng (longitude decimal), opening_hours_text (raw hours text as shown), notes (extras like 'PIS', 'Locker', closures). Return them ALL, do not truncate or summarize.",
+              schema: {
+                type: "object",
+                properties: {
+                  points: {
+                    type: "array",
+                    items: {
+                      type: "object",
+                      properties: {
+                        external_id: { type: ["string", "null"] },
+                        name: { type: "string" },
+                        address: { type: "string" },
+                        postal_code: { type: "string" },
+                        city: { type: "string" },
+                        lat: { type: "number" },
+                        lng: { type: "number" },
+                        opening_hours_text: { type: ["string", "null"] },
+                        notes: { type: ["string", "null"] },
+                      },
+                      required: ["name", "address", "postal_code", "city", "lat", "lng"],
+                    },
+                  },
+                },
+                required: ["points"],
+              },
+            },
+          ],
           onlyMainContent: false,
-          waitFor: 4000,
+          waitFor: 5000,
           location: { country: "FR", languages: ["fr-FR", "fr"] },
         });
         const r = result as {
+          json?: unknown;
           html?: string;
-          rawHtml?: string;
-          markdown?: string;
-          metadata?: { statusCode?: number; contentType?: string };
+          metadata?: { statusCode?: number };
           data?: {
+            json?: unknown;
             html?: string;
-            rawHtml?: string;
-            markdown?: string;
-            metadata?: { statusCode?: number; contentType?: string };
+            metadata?: { statusCode?: number };
           };
         };
-        html = r.html ?? r.data?.html ?? "";
-        rawHtml = r.rawHtml ?? r.data?.rawHtml ?? "";
-        markdown = r.markdown ?? r.data?.markdown ?? "";
+        extracted = r.json ?? r.data?.json ?? null;
+        htmlBytes = (r.html ?? r.data?.html ?? "").length;
         status =
           r.metadata?.statusCode ??
           r.data?.metadata?.statusCode ??
-          (html || rawHtml ? 200 : 0);
-        contentType =
-          r.metadata?.contentType ?? r.data?.metadata?.contentType ?? null;
+          (extracted ? 200 : 0);
       } catch (err) {
         firecrawlError = err instanceof Error ? err.message : String(err);
       }
     }
 
-    const domSource = html || rawHtml;
-    const blocked =
-      status === 401 ||
-      status === 403 ||
-      /access denied|just a moment|attention required|datadome|captcha/i.test(
-        domSource.slice(0, 4000),
-      );
-
-    // Heuristique de comptage : on essaie quelques sélecteurs/patterns connus
-    // pour mesurer si le DOM contient des cartes points relais.
-    const selectorHits: Record<string, number> = {
-      "data-relayid": (domSource.match(/data-relayid=/gi) || []).length,
-      "class~=relay-item": (domSource.match(/class="[^"]*relay-item/gi) || [])
-        .length,
-      "class~=parcelshop": (domSource.match(/class="[^"]*parcelshop/gi) || [])
-        .length,
-      "class~=point-relais": (domSource.match(/class="[^"]*point-relais/gi) ||
-        []).length,
-      "lat-attr": (domSource.match(/data-lat=/gi) || []).length,
-    };
-
-    // Extraction best-effort : on cherche les blocs avec data-lat / data-lng / data-relayid.
-    // Si la page rendue ne les expose pas (SPA non hydratée par Firecrawl), on le verra
-    // dans selectorHits = 0 partout et on saura qu'il faut une autre stratégie.
     const mapped: MappedPoint[] = [];
-    const cardRegex =
-      /<[^>]+data-relayid="([^"]+)"[^>]*data-lat="([^"]+)"[^>]*data-lng="([^"]+)"[^>]*>([\s\S]*?)<\/[a-z]+>/gi;
-    let m: RegExpExecArray | null;
-    while ((m = cardRegex.exec(domSource)) !== null) {
-      const id = m[1];
-      const lat = Number(m[2]);
-      const lng = Number(m[3]);
-      const inner = m[4];
-      if (!Number.isFinite(lat) || !Number.isFinite(lng)) continue;
-      const text = inner.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
-      const cpMatch = /\b(\d{5})\b/.exec(text);
-      const postalCode = cpMatch ? cpMatch[1] : data.postalCode;
-      mapped.push({
-        provider_id: "mondial_relay",
-        external_id: `mr-${id}`,
-        name: text.slice(0, 80) || `Point ${id}`,
-        address: text.slice(0, 200),
-        postal_code: postalCode,
-        city: "",
-        lat,
-        lng,
-        opening_hours: {},
-        notes: "Point Relais (scrape page publique)",
-      });
+    let parseError: string | null = null;
+    let rawPointCount = 0;
+    if (extracted) {
+      try {
+        const parsed = PointJsonSchema.parse(extracted);
+        rawPointCount = parsed.points.length;
+        for (let i = 0; i < parsed.points.length; i++) {
+          const p = parsed.points[i];
+          if (!Number.isFinite(p.lat) || !Number.isFinite(p.lng)) continue;
+          mapped.push({
+            provider_id: "mondial_relay",
+            external_id: p.external_id?.trim() || `mr-${data.postalCode}-${i}`,
+            name: p.name,
+            address: p.address,
+            postal_code: p.postal_code,
+            city: p.city,
+            lat: p.lat,
+            lng: p.lng,
+            opening_hours: {},
+            notes:
+              [p.notes, p.opening_hours_text].filter(Boolean).join(" · ") ||
+              null,
+          });
+        }
+      } catch (err) {
+        parseError = err instanceof Error ? err.message : String(err);
+      }
     }
 
     let inserted = 0;
@@ -156,20 +176,16 @@ export const scrapeMondialRelay = createServerFn({ method: "POST" })
     return {
       startedAt,
       finishedAt: new Date().toISOString(),
-      sourceType: "public-page" as const,
+      sourceType: "public-page-json" as const,
       requestedUrl: url,
       httpStatus: status,
-      contentType,
-      blocked,
       firecrawlError,
-      htmlBytes: html.length,
-      rawHtmlBytes: rawHtml.length,
-      markdownBytes: markdown.length,
-      htmlPreview: domSource.slice(0, 600),
-      markdownPreview: markdown.slice(0, 600),
-      selectorHits,
+      htmlBytes,
+      parseError,
+      rawPointCount,
       mappedCount: mapped.length,
       sampleExtracted: mapped.slice(0, 3),
+      extractedPreview: JSON.stringify(extracted).slice(0, 600),
       inserted,
       dbError,
     };

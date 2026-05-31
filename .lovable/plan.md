@@ -1,48 +1,61 @@
-## Objectif
-Tester depuis le navigateur de l'utilisateur (sans server function) si on peut appeler directement `https://www.mondialrelay.fr/api/parcelshop?...` pour récupérer les points relais. But : valider/invalider l'hypothèse "fetch côté client = ça passe" avant de basculer sur Firecrawl.
+# Migration Mondial Relay → Firecrawl
 
-## Pourquoi on s'attend à un échec (mais on veut le voir)
-- Le navigateur de l'utilisateur résout naturellement le challenge Cloudflare et envoie le cookie `cf_clearance` → cette partie devrait passer.
-- **MAIS** l'endpoint `/api/parcelshop` ne renvoie quasi-certainement pas `Access-Control-Allow-Origin: *` → le navigateur va bloquer la réponse par CORS, **avant** même de te la livrer.
-- Si CORS bloque, on aura le message exact dans la console et un panneau d'erreur clair dans l'UI → on saura à 100 % qu'il faut passer par Firecrawl.
+## Objectif
+Remplacer le `fetch` direct (bloqué par Cloudflare depuis le Worker) par un appel Firecrawl qui résout le challenge et retourne le JSON brut de l'endpoint `/api/parcelshop`. La logique de parsing / mapping / insertion DB reste identique.
 
 ## Étapes
 
-### 1. Nouveau composant `src/components/ClientScrapeButton.tsx`
-Composant client autonome qui contient :
-- Un bouton **"Tester fetch direct (navigateur)"**
-- `useState` pour `loading`, `result`, `error`, `corsBlocked`, `rawResponse`
-- Au clic :
-  - construire l'URL `https://www.mondialrelay.fr/api/parcelshop?country=FR&postcode=75001&city=&services=&excludeSat=false&naturesAllowed=1,A,E,F,D,J,T,S,C`
-  - `fetch(url, { method: "GET", headers: { Accept: "application/json" }, mode: "cors", credentials: "omit" })`
-  - try/catch : si exception → message + flag `corsBlocked` (le navigateur jette `TypeError: Failed to fetch` typique du blocage CORS)
-  - si réponse OK → `res.json()` et affichage du nombre de points + 3 premiers samples
-  - logger le statut, les headers visibles (très limités en cross-origin), la taille de la réponse
+### 1. Connecter Firecrawl
+- Lancer `standard_connectors--connect` avec `connector_id: firecrawl` pour brancher le connecteur (plan gratuit Firecrawl = 500 scrapes/mois, largement suffisant).
+- Vérifier que `FIRECRAWL_API_KEY` est bien dispo côté serveur via `fetch_secrets`.
 
-### 2. Intégrer dans `src/routes/index.tsx`
-Ajouter le nouveau bouton **à côté** de celui existant (server function). On garde les deux pour comparer :
-- "Tester fetch direct (navigateur)" → CORS attendu
-- "Tester import Mondial Relay (75001)" → server function actuelle
+### 2. Installer le SDK
+- `bun add @mendable/firecrawl-js`
 
-Disposer les deux boutons l'un au-dessus de l'autre, même panneau de résultat / erreur.
+### 3. Réécrire `src/lib/mondial-relay.functions.ts`
+Garder la même signature de server function (`scrapeMondialRelay`), même input (`postalCode`, `country`), même retour (diagnostic + sample). Seul le bloc `fetch(...)` est remplacé.
 
-### 3. Affichage diagnostic enrichi
-Quand l'appel échoue, afficher :
-- Le message d'erreur exact (`TypeError: Failed to fetch` → on l'interprète comme "CORS")
-- Un encart explicatif : "Si tu vois 'Failed to fetch', c'est CORS qui bloque côté navigateur. Vérifie la console (onglet réseau) pour confirmer le statut Cloudflare."
+Remplacement :
+```ts
+import Firecrawl from "@mendable/firecrawl-js";
 
-### 4. Aucune écriture en DB
-Ce bouton-test **ne touche pas** à la base. Il affiche juste le JSON brut. Pas de DELETE / INSERT pickup_points.
+const firecrawl = new Firecrawl({ apiKey: process.env.FIRECRAWL_API_KEY! });
+const result = await firecrawl.scrape(url, {
+  formats: ["rawHtml"],   // l'endpoint renvoie du JSON pur, on récupère le body brut
+  onlyMainContent: false,
+});
+// Firecrawl renvoie le contenu dans result.rawHtml (ou result.html)
+// Pour un endpoint JSON, le body est directement dans rawHtml en string
+bodyText = result.rawHtml ?? result.html ?? "";
+status = result.metadata?.statusCode ?? 200;
+```
 
-## Validation
-1. Cliquer "Tester fetch direct" → observer le résultat.
-2. Trois issues possibles :
-   - **CORS bloqué** (attendu) → `TypeError: Failed to fetch`, on enchaîne sur Firecrawl.
-   - **Cloudflare 403** → on voit le statut, peu probable car le navigateur a déjà ses cookies, mais possible.
-   - **Succès** (peu probable mais cool) → on a un tableau JSON, on saura qu'on peut tout faire côté client.
-3. Ouvrir l'onglet Réseau du navigateur pour voir la vraie raison (CORS preflight, 403, etc.).
+Conserver :
+- `ResponseSchema` Zod et toute la logique `buildHours` / `buildNotes` / mapping
+- Le DELETE + INSERT en DB sur `provider_id = "mondial_relay"`
+- Le retour de diagnostic (httpStatus, bodyPreview, rawCount, mappedCount, inserted, samplePoints)
+
+Ajouter au diagnostic :
+- `firecrawlError: string | null` si l'appel SDK throw
+- Retirer `cloudflareBlocked` (plus pertinent) ou le garder mais toujours `false`
+
+### 4. Nettoyage UI
+- Supprimer `src/components/ClientScrapeButton.tsx` (test obsolète, CORS confirmé bloquant)
+- Retirer son import et son usage dans `src/routes/index.tsx`
+- Renommer le bouton restant en **"Importer Mondial Relay (75001) via Firecrawl"**
+
+### 5. Validation
+1. Cliquer le bouton → s'attendre à `httpStatus: 200`, `rawCount > 0`, `inserted > 0`.
+2. Recharger la carte → les points 75001 doivent apparaître.
+3. Vérifier dans le panneau JSON qu'il n'y a pas de `firecrawlError` ni `parseError`.
 
 ## Hors scope
-- Pas de migration Firecrawl dans ce ticket (plan déjà prêt pour après).
-- Pas de modif sur la server function existante.
-- Pas d'insertion en DB côté client.
+- Pas de changement du schéma DB.
+- Pas d'extension aux autres codes postaux (on garde 75001 pour le test, on généralisera après validation).
+- Pas de gestion de credits Firecrawl (le plan gratuit suffit pour quelques scrapes/mois).
+
+## Détails techniques
+
+**Pourquoi `rawHtml` et pas `json` ou `markdown`** : l'URL cible est un endpoint API qui renvoie du JSON, pas une page HTML. Firecrawl récupère le corps brut de la réponse ; on le passe ensuite à `JSON.parse` comme avant. Le format `markdown` essaierait de convertir, le format `json` (extraction LLM) est inutile et coûteux ici.
+
+**Coût** : 1 scrape Firecrawl = 1 credit. Le plan gratuit donne 500 credits/mois, soit ~16 scrapes/jour. Largement au-dessus du besoin "quelques scrapes/mois".

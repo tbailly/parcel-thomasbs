@@ -1,8 +1,11 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { queryOptions, useSuspenseQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
-import { getRefreshProviders } from "@/lib/refresh.functions";
+import { getRefreshProviders, importPickupPointsJson } from "@/lib/refresh.functions";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 
 const refreshProvidersQueryOptions = queryOptions({
   queryKey: ["refresh-providers"],
@@ -26,7 +29,11 @@ export const Route = createFileRoute("/refresh")({
 });
 
 function RefreshPage() {
+  const router = useRouter();
   const { data } = useSuspenseQuery(refreshProvidersQueryOptions);
+  const importFn = useServerFn(importPickupPointsJson);
+  const [jsonByProvider, setJsonByProvider] = useState<Record<string, string>>({});
+  const [loadingId, setLoadingId] = useState<string | null>(null);
 
   const handleClick = async (provider: {
     name: string;
@@ -46,6 +53,41 @@ function RefreshPage() {
     window.open(provider.refresh_url, "_blank", "noopener,noreferrer");
   };
 
+  const handleImport = async (providerId: string, providerName: string) => {
+    const raw = jsonByProvider[providerId]?.trim();
+    if (!raw) {
+      toast.error("Colle d'abord un JSON dans la zone de texte.");
+      return;
+    }
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(raw);
+    } catch (e) {
+      toast.error(`JSON invalide : ${e instanceof Error ? e.message : String(e)}`);
+      return;
+    }
+    if (!Array.isArray(parsed)) {
+      toast.error("Le JSON doit être un tableau d'objets.");
+      return;
+    }
+
+    setLoadingId(providerId);
+    try {
+      const res = await importFn({
+        data: { provider_id: providerId, points: parsed as never },
+      });
+      toast.success(
+        `${providerName} : ${res.inserted} points insérés (query ${res.query_id.slice(0, 8)}…)`,
+      );
+      setJsonByProvider((s) => ({ ...s, [providerId]: "" }));
+      router.invalidate();
+    } catch (e) {
+      toast.error(`Import échoué : ${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setLoadingId(null);
+    }
+  };
+
   return (
     <main className="min-h-screen bg-background px-4 py-12">
       <div className="mx-auto flex max-w-2xl flex-col gap-8">
@@ -56,7 +98,8 @@ function RefreshPage() {
           <p className="text-sm text-muted-foreground">
             Clique sur un provider : le script est copié dans ton presse-papiers
             et le site s'ouvre dans un nouvel onglet. Colle ensuite le script
-            dans la console (DevTools) du site ouvert.
+            dans la console (DevTools) du site ouvert, puis colle le JSON
+            résultant dans la zone de texte ci-dessous et clique sur "Importer".
           </p>
         </header>
 
@@ -82,6 +125,33 @@ function RefreshPage() {
                 >
                   {provider.name}
                 </Button>
+
+                <div className="flex flex-col gap-2">
+                  <label className="text-xs font-medium text-muted-foreground">
+                    JSON des points (array)
+                  </label>
+                  <Textarea
+                    value={jsonByProvider[provider.id] ?? ""}
+                    onChange={(e) =>
+                      setJsonByProvider((s) => ({
+                        ...s,
+                        [provider.id]: e.target.value,
+                      }))
+                    }
+                    placeholder='[{"external_id":"...","name":"...","address":"...","postal_code":"...","city":"...","lat":48.85,"lng":2.35,"opening_hours":{},"notes":null}]'
+                    className="min-h-32 font-mono text-xs"
+                  />
+                  <Button
+                    variant="secondary"
+                    onClick={() => handleImport(provider.id, provider.name)}
+                    disabled={loadingId === provider.id}
+                  >
+                    {loadingId === provider.id
+                      ? "Import en cours…"
+                      : "Importer le JSON"}
+                  </Button>
+                </div>
+
                 <details className="text-xs text-muted-foreground">
                   <summary className="cursor-pointer select-none">
                     Voir le script

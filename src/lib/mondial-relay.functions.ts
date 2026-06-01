@@ -303,11 +303,20 @@ export const scrapeMondialRelayDebug93400 = createServerFn({ method: "POST" })
       const seen = new Set<string>();
       for (let i = 0; i < points.length; i++) {
         const p = points[i];
-        if (!Number.isFinite(p.lat) || !Number.isFinite(p.lng)) continue;
+        const lat = p.lat;
+        const lng = p.lng;
+        if (
+          typeof lat !== "number" ||
+          typeof lng !== "number" ||
+          !Number.isFinite(lat) ||
+          !Number.isFinite(lng) ||
+          (lat === 0 && lng === 0)
+        )
+          continue;
         const extId = p.external_id?.trim() || "";
         const key = extId
           ? `id:${extId}`
-          : `geo:${p.lat.toFixed(5)}|${p.lng.toFixed(5)}`;
+          : `geo:${lat.toFixed(5)}|${lng.toFixed(5)}`;
         if (seen.has(key)) continue;
         seen.add(key);
         mapped.push({
@@ -317,8 +326,8 @@ export const scrapeMondialRelayDebug93400 = createServerFn({ method: "POST" })
           address: p.address,
           postal_code: p.postal_code,
           city: p.city,
-          lat: p.lat,
-          lng: p.lng,
+          lat,
+          lng,
           opening_hours: {},
           notes:
             [p.notes, p.opening_hours_text].filter(Boolean).join(" · ") || null,

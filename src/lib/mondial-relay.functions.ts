@@ -137,23 +137,32 @@ async function scrapeOnePostalCode(
 
     const r = result as {
       json?: unknown;
+      rawHtml?: string;
+      html?: string;
       metadata?: { statusCode?: number };
-      data?: { json?: unknown; metadata?: { statusCode?: number } };
+      data?: {
+        json?: unknown;
+        rawHtml?: string;
+        html?: string;
+        metadata?: { statusCode?: number };
+      };
     };
     const extracted = r.json ?? r.data?.json ?? null;
+    const rawHtml = r.rawHtml ?? r.data?.rawHtml ?? r.html ?? r.data?.html ?? null;
     const status =
       r.metadata?.statusCode ?? r.data?.metadata?.statusCode ?? (extracted ? 200 : 0);
 
     if (!extracted) {
-      return { points: [], error: "no json extracted", httpStatus: status };
+      return { points: [], error: "no json extracted", httpStatus: status, rawHtml };
     }
     const parsed = PointJsonSchema.parse(extracted);
-    return { points: parsed.points, error: null, httpStatus: status };
+    return { points: parsed.points, error: null, httpStatus: status, rawHtml };
   } catch (err) {
     return {
       points: [],
       error: err instanceof Error ? err.message : String(err),
       httpStatus: 0,
+      rawHtml: null,
     };
   }
 }

@@ -9,9 +9,15 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as RefreshRouteImport } from './routes/refresh'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApiPublicRefreshPudosRouteImport } from './routes/api/public/refresh-pudos'
 
+const RefreshRoute = RefreshRouteImport.update({
+  id: '/refresh',
+  path: '/refresh',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -25,32 +31,43 @@ const ApiPublicRefreshPudosRoute = ApiPublicRefreshPudosRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/refresh': typeof RefreshRoute
   '/api/public/refresh-pudos': typeof ApiPublicRefreshPudosRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/refresh': typeof RefreshRoute
   '/api/public/refresh-pudos': typeof ApiPublicRefreshPudosRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/refresh': typeof RefreshRoute
   '/api/public/refresh-pudos': typeof ApiPublicRefreshPudosRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/api/public/refresh-pudos'
+  fullPaths: '/' | '/refresh' | '/api/public/refresh-pudos'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/api/public/refresh-pudos'
-  id: '__root__' | '/' | '/api/public/refresh-pudos'
+  to: '/' | '/refresh' | '/api/public/refresh-pudos'
+  id: '__root__' | '/' | '/refresh' | '/api/public/refresh-pudos'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  RefreshRoute: typeof RefreshRoute
   ApiPublicRefreshPudosRoute: typeof ApiPublicRefreshPudosRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/refresh': {
+      id: '/refresh'
+      path: '/refresh'
+      fullPath: '/refresh'
+      preLoaderRoute: typeof RefreshRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -70,18 +87,9 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  RefreshRoute: RefreshRoute,
   ApiPublicRefreshPudosRoute: ApiPublicRefreshPudosRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}

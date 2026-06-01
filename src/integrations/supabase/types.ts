@@ -140,6 +140,8 @@ export type Database = {
           id: string
           logo_url: string
           name: string
+          refresh_script: string | null
+          refresh_url: string | null
         }
         Insert: {
           color: string
@@ -147,6 +149,8 @@ export type Database = {
           id: string
           logo_url: string
           name: string
+          refresh_script?: string | null
+          refresh_url?: string | null
         }
         Update: {
           color?: string
@@ -154,6 +158,8 @@ export type Database = {
           id?: string
           logo_url?: string
           name?: string
+          refresh_script?: string | null
+          refresh_url?: string | null
         }
         Relationships: []
       }

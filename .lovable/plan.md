@@ -1,36 +1,46 @@
-## Hypothèse à tester
+# Refresh semi-automatique des providers
 
-Le run "changé extraction en Json" (169 points) utilisait un appel Firecrawl **sans `actions`** — juste `scrape(url, { formats: [{ type: "json", prompt, schema }], onlyMainContent: false, waitFor: 3000, location })`. Aucune tentative de clic "Afficher plus".
+## Idée
 
-La version actuelle a ajouté des `actions` (`executeJavascript` × 5 pour cliquer sur "Afficher plus"). Quand ces actions échouent côté Firecrawl, **tout le scrape est abandonné** — c'est ce qu'on voit dans les `queries` récentes (`err=Action(s) failed to complete ... ActionError: Element not found`).
+Pour chaque provider, on stocke en base :
+- une URL à ouvrir dans un nouvel onglet,
+- un script JavaScript (texte libre) que l'utilisateur collera lui-même dans la console du site ouvert.
 
-Donc avant d'instrumenter quoi que ce soit, je veux **rejouer la requête originale telle quelle**, mais avec `93400` au lieu de `75001`, pour répondre à une question simple :
+Une nouvelle page `/refresh` liste les providers configurés. Un clic sur le bouton du provider :
+1. copie le script dans le presse-papiers,
+2. ouvre l'URL dans un nouvel onglet.
 
-- Est-ce que le 93400, sans clic "Afficher plus", donne ~13 points (limite réelle MR à cet endroit) ou ~150+ (alors le coupable c'est uniquement nos `actions`) ?
+On commence avec Mondial Relay ; les autres providers viendront s'ajouter au même mécanisme s'ils s'y prêtent.
 
-## Étapes
+## Changements
 
-1. **Mode debug "scrape simple"**
-   - Ajouter dans la server fn une variante (paramètre `mode: "simple-93400"` ou flag) qui :
-     - n'utilise **aucune** `actions`,
-     - force le code postal `93400` (pays `FR`),
-     - garde exactement le même `prompt`, `schema`, `formats: [{ type: "json", ... }]`, `waitFor: 3000`, `onlyMainContent: false`, `location: { country: "FR", languages: ["fr-FR","fr"] }` qu'au run "changé extraction en Json".
-   - Cette variante reste **synchrone** dans la server fn (pas de `backgroundTask`) pour qu'on récupère le résultat directement et qu'on ne reste pas bloqué en `running`.
+### 1. Base de données (migration)
 
-2. **Sécuriser la fin de job dans tous les cas**
-   - Même hors mode debug, si `runScrapeJob` lance ou plante, la ligne `queries` doit toujours finir en `success` ou `error` (try/catch global + `finally` update).
-   - Évite les `running` éternels comme `87ae1dfb-...`.
+Ajouter deux colonnes à `public.providers` :
+- `refresh_url text` — l'URL à ouvrir.
+- `refresh_script text` — le script à copier dans le presse-papiers.
 
-3. **Diagnostic retourné**
-   - `rawCount`, `insertedCount`, échantillon des 3 premiers points, erreur Firecrawl brute si présente.
-   - Un bouton temporaire "Test 93400 simple" sur la page pour déclencher ce mode et voir le résultat à l'écran.
+Puis seeder Mondial Relay :
+- `refresh_url = 'https://www.mondialrelay.fr/trouver-le-point-relais-le-plus-proche-de-chez-moi/'`
+- `refresh_script = "main() {\n  console.log('TOTO');\n}\nmain();"`
 
-4. **Décision après le test**
-   - Si on obtient >>13 points sur 93400 : on supprime définitivement les `actions` (et on cherche un autre levier pour élargir si nécessaire — search radius dans le prompt, multi-CP autour).
-   - Si on obtient ~13 points : la limite vient réellement de la page MR pour ce CP, et il faudra une autre stratégie (zone élargie, plusieurs CP voisins).
+### 2. Server function
+
+`src/lib/refresh.functions.ts` : `getRefreshProviders` (GET, sans auth) → renvoie `[{ id, name, color, refresh_url, refresh_script }]` filtré sur les lignes où `refresh_url` et `refresh_script` sont non nuls. Lecture via `supabaseAdmin`.
+
+### 3. Route `/refresh`
+
+`src/routes/refresh.tsx` :
+- `head()` avec title/description dédiés.
+- Loader qui pré-charge la liste via TanStack Query (`ensureQueryData`).
+- Composant : pour chaque provider, un gros bouton (style `Button` size lg, couleur du provider en accent). Au clic :
+  1. `await navigator.clipboard.writeText(provider.refresh_script)`
+  2. `window.open(provider.refresh_url, '_blank', 'noopener')`
+  3. petit toast / texte de confirmation "Script copié, onglet ouvert".
+- Gestion d'erreur clipboard (fallback : afficher le script dans un `<textarea>` sélectionné, demander de copier manuellement).
 
 ## Hors scope
 
-- Pas de refonte des `actions`, pas de polling client, pas de changement de schéma DB.
-- Le mode multi-adresses / dédoublonnage existant reste tel quel pour le run normal.
-- Le bouton temporaire sera retiré ensuite.
+- Pas de modification du flow Firecrawl/scrape existant.
+- Pas d'ingestion automatique du résultat du script — pour l'instant le script ne fait que `console.log('TOTO')`, on validera la mécanique avant de brancher quoi que ce soit derrière.
+- Pas d'auth sur `/refresh` (page interne d'outillage, comme la page `/`).

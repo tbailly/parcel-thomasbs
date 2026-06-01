@@ -57,7 +57,7 @@ async function scrapeOnePostalCode(
   postalCode: string,
   country: string,
   opts: { withActions?: boolean } = { withActions: true },
-): Promise<{ points: RawPoint[]; error: string | null; httpStatus: number }> {
+): Promise<{ points: RawPoint[]; error: string | null; httpStatus: number; rawHtml: string | null }> {
   const url = `https://www.mondialrelay.fr/trouver-le-point-relais-le-plus-proche-de-chez-moi/?codePostal=${postalCode}&pays=${country}`;
 
   // Tolerant click via executeJavascript: tries multiple selectors / button
@@ -137,23 +137,32 @@ async function scrapeOnePostalCode(
 
     const r = result as {
       json?: unknown;
+      rawHtml?: string;
+      html?: string;
       metadata?: { statusCode?: number };
-      data?: { json?: unknown; metadata?: { statusCode?: number } };
+      data?: {
+        json?: unknown;
+        rawHtml?: string;
+        html?: string;
+        metadata?: { statusCode?: number };
+      };
     };
     const extracted = r.json ?? r.data?.json ?? null;
+    const rawHtml = r.rawHtml ?? r.data?.rawHtml ?? r.html ?? r.data?.html ?? null;
     const status =
       r.metadata?.statusCode ?? r.data?.metadata?.statusCode ?? (extracted ? 200 : 0);
 
     if (!extracted) {
-      return { points: [], error: "no json extracted", httpStatus: status };
+      return { points: [], error: "no json extracted", httpStatus: status, rawHtml };
     }
     const parsed = PointJsonSchema.parse(extracted);
-    return { points: parsed.points, error: null, httpStatus: status };
+    return { points: parsed.points, error: null, httpStatus: status, rawHtml };
   } catch (err) {
     return {
       points: [],
       error: err instanceof Error ? err.message : String(err),
       httpStatus: 0,
+      rawHtml: null,
     };
   }
 }
@@ -290,36 +299,40 @@ export const scrapeMondialRelayDebug93400 = createServerFn({ method: "POST" })
     const queryId = (qRow?.id as string | undefined) ?? null;
 
     const firecrawl = new Firecrawl({ apiKey });
-    const { points, error, httpStatus } = await scrapeOnePostalCode(
+    const { points, error, httpStatus, rawHtml } = await scrapeOnePostalCode(
       firecrawl,
       "93400",
       "FR",
       { withActions: false },
     );
 
+    // Extract script tags / inline JSON snippets that likely contain the real
+    // pickup-point payload (lat/lng/horaires) so we can analyse them.
+    const scriptSnippets: string[] = [];
+    if (rawHtml) {
+      const scriptRe = /<script\b[^>]*>([\s\S]*?)<\/script>/gi;
+      let m: RegExpExecArray | null;
+      while ((m = scriptRe.exec(rawHtml)) !== null) {
+        const body = m[1] || "";
+        if (/latitude|longitude|\blat\b|\blng\b|horaires/i.test(body)) {
+          scriptSnippets.push(body.slice(0, 4000));
+          if (scriptSnippets.length >= 5) break;
+        }
+      }
+    }
+
     let inserted = 0;
     let dbError: string | null = null;
     if (queryId && points.length > 0) {
       const mapped: MappedPoint[] = [];
-      const seen = new Set<string>();
       for (let i = 0; i < points.length; i++) {
         const p = points[i];
-        const lat = p.lat;
-        const lng = p.lng;
-        if (
-          typeof lat !== "number" ||
-          typeof lng !== "number" ||
-          !Number.isFinite(lat) ||
-          !Number.isFinite(lng) ||
-          (lat === 0 && lng === 0)
-        )
-          continue;
+        const lat = typeof p.lat === "number" && Number.isFinite(p.lat) ? p.lat : 0;
+        const lng = typeof p.lng === "number" && Number.isFinite(p.lng) ? p.lng : 0;
         const extId = p.external_id?.trim() || "";
-        const key = extId
-          ? `id:${extId}`
-          : `geo:${lat.toFixed(5)}|${lng.toFixed(5)}`;
-        if (seen.has(key)) continue;
-        seen.add(key);
+        // Store the FULL raw JSON object for this point in `notes` so we can
+        // analyse together exactly what Firecrawl returned per point.
+        const rawJson = JSON.stringify(p);
         mapped.push({
           provider_id: PROVIDER_ID,
           external_id: extId || `mr-93400-${queryId.slice(0, 8)}-${i}`,
@@ -330,8 +343,7 @@ export const scrapeMondialRelayDebug93400 = createServerFn({ method: "POST" })
           lat,
           lng,
           opening_hours: {},
-          notes:
-            [p.notes, p.opening_hours_text].filter(Boolean).join(" · ") || null,
+          notes: `RAW=${rawJson}`,
           query_id: queryId,
         });
       }
@@ -343,13 +355,22 @@ export const scrapeMondialRelayDebug93400 = createServerFn({ method: "POST" })
     }
 
     if (queryId) {
+      // Stuff diagnostics into queries.error so we can read them via SQL.
+      const diag = [
+        error ? `scrape_err=${error}` : null,
+        dbError,
+        `rawHtmlLen=${rawHtml?.length ?? 0}`,
+        scriptSnippets.length > 0
+          ? `scripts=${JSON.stringify(scriptSnippets).slice(0, 30000)}`
+          : "scripts=none",
+      ].filter(Boolean);
       await supabaseAdmin
         .from("queries")
         .update({
           status: error || dbError ? "error" : "success",
           raw_count: points.length,
           inserted_count: inserted,
-          error: [error, dbError].filter(Boolean).join(" || ") || null,
+          error: diag.join(" || "),
           finished_at: new Date().toISOString(),
         })
         .eq("id", queryId);

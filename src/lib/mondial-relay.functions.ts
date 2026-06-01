@@ -57,7 +57,7 @@ async function scrapeOnePostalCode(
   postalCode: string,
   country: string,
   opts: { withActions?: boolean } = { withActions: true },
-): Promise<{ points: RawPoint[]; error: string | null; httpStatus: number }> {
+): Promise<{ points: RawPoint[]; error: string | null; httpStatus: number; rawHtml: string | null }> {
   const url = `https://www.mondialrelay.fr/trouver-le-point-relais-le-plus-proche-de-chez-moi/?codePostal=${postalCode}&pays=${country}`;
 
   // Tolerant click via executeJavascript: tries multiple selectors / button

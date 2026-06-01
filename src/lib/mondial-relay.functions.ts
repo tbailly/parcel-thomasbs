@@ -94,10 +94,11 @@ async function scrapeOnePostalCode(
   try {
     const scrapeOptions: Record<string, unknown> = {
       formats: [
+        "rawHtml",
         {
           type: "json",
           prompt:
-            "Extract EVERY Mondial Relay pickup point (point relais / parcelshop) visible on this page. For each, return: external_id (relay code/id if visible, else null), name (shop name), address (street line), postal_code (5 digits), city, lat (latitude decimal), lng (longitude decimal), opening_hours_text (raw hours text as shown), notes (extras like 'PIS', 'Locker', closures). Return them ALL, do not truncate.",
+            "Extract EVERY Mondial Relay pickup point (point relais / parcelshop) listed on this page (typically inside elements with class containing 'PR' / 'PointRelais'). For each, return: external_id (relay code/id, often in a data-id, data-pr or onclick attribute, else null), name (shop name), address (street line), postal_code (5 digits), city, lat (latitude decimal — look for data-lat / data-latitude / data-pr-lat attributes or numbers in the embedded JS like Latitude: 48.xxx; if you cannot find the real coordinate, return null — DO NOT invent or return 0), lng (same rules — return null if unknown), opening_hours_text (raw weekly hours text — may be hidden but present in the markup; null if truly absent), notes (extras like 'PIS', 'Locker', closures). Return ALL points, do not truncate.",
           schema: {
             type: "object",
             properties: {
@@ -111,12 +112,12 @@ async function scrapeOnePostalCode(
                     address: { type: "string" },
                     postal_code: { type: "string" },
                     city: { type: "string" },
-                    lat: { type: "number" },
-                    lng: { type: "number" },
+                    lat: { type: ["number", "null"] },
+                    lng: { type: ["number", "null"] },
                     opening_hours_text: { type: ["string", "null"] },
                     notes: { type: ["string", "null"] },
                   },
-                  required: ["name", "address", "postal_code", "city", "lat", "lng"],
+                  required: ["name", "address", "postal_code", "city"],
                 },
               },
             },

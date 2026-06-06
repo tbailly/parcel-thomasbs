@@ -64,16 +64,16 @@ function makeIcon(provider: Provider): L.DivIcon {
   const logo = getProviderLogo(provider);
   const color = provider.color;
   // Teardrop pin: circle on top + pointed tip at bottom. Tip = exact coordinate.
-  // SVG box 40x52 ; circle cx=20 cy=20 r=18 ; tip at (20,52).
   const html = `
-    <div style="position:relative;width:40px;height:52px;filter:drop-shadow(0 2px 3px rgba(0,0,0,0.35))">
-      <svg width="40" height="52" viewBox="0 0 40 52" xmlns="http://www.w3.org/2000/svg" style="position:absolute;inset:0">
-        <path d="M20 51.5 C 20 51.5 6 32 4 24 A 18 18 0 1 1 36 24 C 34 32 20 51.5 20 51.5 Z"
-              fill="${color}" stroke="#ffffff" stroke-width="2.5" stroke-linejoin="round"/>
-        <circle cx="20" cy="20" r="13" fill="#ffffff"/>
-      </svg>
-      <img src="${logo}" alt="" style="position:absolute;left:7px;top:7px;width:26px;height:26px;border-radius:50%;object-fit:cover"/>
-    </div>`;
+    <svg width="40" height="52" viewBox="0 0 40 52" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" style="display:block;filter:drop-shadow(0 2px 3px rgba(0,0,0,0.35))">
+      <defs>
+        <clipPath id="cl-${provider.id}"><circle cx="20" cy="20" r="13"/></clipPath>
+      </defs>
+      <path d="M20 51.5 C 20 51.5 6 32 4 24 A 18 18 0 1 1 36 24 C 34 32 20 51.5 20 51.5 Z"
+            fill="${color}" stroke="#ffffff" stroke-width="2.5" stroke-linejoin="round"/>
+      <circle cx="20" cy="20" r="13" fill="#ffffff"/>
+      <image href="${logo}" x="7" y="7" width="26" height="26" clip-path="url(#cl-${provider.id})" preserveAspectRatio="xMidYMid slice"/>
+    </svg>`;
   return L.divIcon({
     className: "pudo-pin",
     html,

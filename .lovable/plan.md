@@ -1,38 +1,40 @@
 ## Objectif
 
-Sur `/refresh`, sous le bouton de chaque provider, ajouter une zone de texte où coller un JSON (array) de points relais. Au clic sur "Importer", créer une nouvelle `query` puis insérer un `pickup_point` par élément avec `query_id` et `provider_id`.
+Restyliser les pins de la carte avec une forme classique de "pin" (rond en haut, pointe en bas où la pointe correspond exactement à la coordonnée géographique), avec le logo du provider à l'intérieur du rond.
 
-## Format JSON attendu
+## Étapes
 
-Array d'objets avec : `external_id`, `name`, `address`, `postal_code`, `city`, `lat`, `lng`, `opening_hours`, `notes`.
+### 1. Assets logos providers
 
-## Implémentation
+Créer `src/assets/providers/` avec :
+- `mondial-relay.png` — copié depuis l'image uploadée (`/mnt/user-uploads/logo_cropped.png`).
+- `vinted-go.svg`, `chronopost.svg`, `shop2shop.svg` — placeholders SVG simples (cercle coloré avec initiales du provider, type "VG", "CH", "S2S") qu'on pourra remplacer plus tard.
 
-### 1. Nouveau server function `src/lib/refresh.functions.ts`
+Les fichiers sont petits → on les garde dans le repo (pas de lovable-assets).
 
-Ajouter `importPickupPointsJson` (`POST`) :
+### 2. Mettre à jour `logo_url` des providers
 
-- Input validé via Zod : `{ provider_id: string, points: Array<{external_id, name, address, postal_code, city, lat:number, lng:number, opening_hours:any, notes:string|null}> }`.
-- Handler (via `supabaseAdmin`) :
-  1. `insert` dans `queries` : `{ provider_id, status: 'success', started_at: now, finished_at: now, raw_count: points.length, inserted_count: points.length }` → récupérer `id`.
-  2. `insert` dans `pickup_points` du batch mappé avec `query_id` + `provider_id`.
-  3. En cas d'erreur insert points : update query avec `status='error'`, `error=...`.
-- Retour : `{ query_id, inserted }`.
+Migration SQL : `UPDATE providers SET logo_url = '/src/...'` n'est pas idéal car Vite gère les imports. Préférer :
+- Garder `logo_url` en DB pour les autres usages éventuels, mais côté `PickupMap` mapper `provider.name` (ou un slug) vers un import local.
+- Créer un petit map `providerLogos: Record<string, string>` dans `PickupMap.tsx` (ou un fichier dédié `src/lib/provider-logos.ts`) qui mappe `provider.name` → URL importée (`import mondialRelayLogo from "@/assets/providers/mondial-relay.png"`).
+- Fallback sur `provider.logo_url` si pas de mapping local.
 
-### 2. UI `src/routes/refresh.tsx`
+### 3. Nouveau design de pin dans `PickupMap.tsx`
 
-Sous le bouton de chaque provider, ajouter dans le `<li>` :
+Remplacer `makeIcon` (actuellement un cercle centré sur la coordonnée) par un pin en goutte :
 
-- `<Textarea>` (shadcn) contrôlée via `useState` (map `providerId -> string`).
-- Bouton "Importer JSON" qui :
-  - parse le texte (try/catch → toast.error si invalide),
-  - appelle `useServerFn(importPickupPointsJson)`,
-  - toast success avec nb inséré + `query_id`,
-  - vide la textarea.
-- État `loading` par provider pour disable le bouton.
+- SVG inline dans le `divIcon` html :
+  - Forme : cercle de 36px en haut + pointe triangulaire de 14px en bas (total ~50px de haut).
+  - Couleur de fond = `provider.color`, bordure blanche 2px, ombre douce.
+  - Logo du provider centré dans la partie circulaire (28×28, `border-radius:50%`, `object-fit:cover`, fond blanc).
+- `iconSize: [36, 50]`, `iconAnchor: [18, 50]` (pointe = bas du SVG = coordonnée exacte), `popupAnchor: [0, -46]`.
 
-### 3. Hors scope
+### 4. Légende
 
-- Pas de modification du schéma DB (les colonnes existent déjà).
-- Pas de dédup / upsert : insertion brute comme demandé.
-- Pas d'auth (la page `/refresh` reste publique comme actuellement).
+Garder le rendu actuel de la légende (petit rond avec logo) — pas besoin de changer.
+
+## Hors scope
+
+- Pas de changement DB.
+- Pas de modification de la logique de fetch ou des popups (contenu inchangé).
+- Pas de touch à `/refresh`.

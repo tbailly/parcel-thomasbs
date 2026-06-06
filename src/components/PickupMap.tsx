@@ -172,7 +172,7 @@ export function PickupMap({ providers, points, config }: Props) {
                   onChange={(e) => setEnabled((prev) => ({ ...prev, [p.id]: e.target.checked }))}
                   className="h-4 w-4 accent-gray-900"
                 />
-                <img src={p.logo_url} alt="" width={20} height={20} className="rounded-full" />
+                <img src={getProviderLogo(p)} alt="" width={20} height={20} className="rounded-full object-cover" />
                 <span className="truncate" style={{ color: p.color }}>{p.name}</span>
               </label>
             </li>

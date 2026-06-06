@@ -5,6 +5,7 @@ import "leaflet.markercluster";
 import "leaflet.markercluster/dist/MarkerCluster.css";
 import "leaflet.markercluster/dist/MarkerCluster.Default.css";
 import type { AppConfig, OpeningHours, PickupPoint, Provider } from "@/lib/pickup-points.functions";
+import { getProviderLogo } from "@/lib/provider-logos";
 
 type Props = {
   providers: Provider[];
@@ -32,6 +33,7 @@ function formatHours(hours: OpeningHours[keyof OpeningHours]): string {
 function buildPopupHtml(point: PickupPoint, provider: Provider): string {
   const todayKey = DAY_KEYS[new Date().getDay()];
   const isFake = point.name.startsWith("Fake - ");
+  const logo = getProviderLogo(provider);
   const rows = DAYS.map(({ key, label }) => {
     const isToday = key === todayKey;
     return `<tr${isToday ? ' style="font-weight:600;color:' + provider.color + '"' : ""}>
@@ -43,7 +45,7 @@ function buildPopupHtml(point: PickupPoint, provider: Provider): string {
   return `
     <div style="font-family:inherit;min-width:220px;max-width:280px">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-        <img src="${provider.logo_url}" width="22" height="22" alt="" style="border-radius:50%"/>
+        <img src="${logo}" width="22" height="22" alt="" style="border-radius:50%;object-fit:cover"/>
         <strong style="font-size:13px">${provider.name}</strong>
         ${isFake ? '<span style="margin-left:auto;font-size:10px;background:#fde68a;color:#92400e;padding:2px 6px;border-radius:4px">DEMO</span>' : ""}
       </div>
@@ -59,12 +61,25 @@ function buildPopupHtml(point: PickupPoint, provider: Provider): string {
 }
 
 function makeIcon(provider: Provider): L.DivIcon {
+  const logo = getProviderLogo(provider);
+  const color = provider.color;
+  // Teardrop pin: circle on top + pointed tip at bottom. Tip = exact coordinate.
+  // SVG box 40x52 ; circle cx=20 cy=20 r=18 ; tip at (20,52).
+  const html = `
+    <div style="position:relative;width:40px;height:52px;filter:drop-shadow(0 2px 3px rgba(0,0,0,0.35))">
+      <svg width="40" height="52" viewBox="0 0 40 52" xmlns="http://www.w3.org/2000/svg" style="position:absolute;inset:0">
+        <path d="M20 51.5 C 20 51.5 6 32 4 24 A 18 18 0 1 1 36 24 C 34 32 20 51.5 20 51.5 Z"
+              fill="${color}" stroke="#ffffff" stroke-width="2.5" stroke-linejoin="round"/>
+        <circle cx="20" cy="20" r="13" fill="#ffffff"/>
+      </svg>
+      <img src="${logo}" alt="" style="position:absolute;left:7px;top:7px;width:26px;height:26px;border-radius:50%;object-fit:cover"/>
+    </div>`;
   return L.divIcon({
     className: "pudo-pin",
-    html: `<div style="width:34px;height:34px;border-radius:50%;background:white;border:3px solid ${provider.color};box-shadow:0 2px 6px rgba(0,0,0,0.25);display:flex;align-items:center;justify-content:center;overflow:hidden"><img src="${provider.logo_url}" width="28" height="28" alt="" style="border-radius:50%"/></div>`,
-    iconSize: [34, 34],
-    iconAnchor: [17, 17],
-    popupAnchor: [0, -14],
+    html,
+    iconSize: [40, 52],
+    iconAnchor: [20, 52],
+    popupAnchor: [0, -48],
   });
 }
 

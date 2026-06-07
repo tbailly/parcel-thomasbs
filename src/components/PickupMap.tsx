@@ -424,26 +424,28 @@ function PointSheet({ point, provider, onClose }: { point: PickupPoint | null; p
               <div className="mt-2 rounded-lg bg-gray-100/80 px-2.5 py-1.5 text-[11px] text-gray-700">{point.notes}</div>
             )}
 
-            <div className="mt-3 grid grid-cols-2 gap-2">
+            <div className="mt-3 flex items-center justify-end gap-2">
               <a
                 href={gmapsUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center justify-center gap-1.5 rounded-xl border border-white/60 bg-white/80 py-2 text-[13px] font-medium text-gray-800 shadow-sm backdrop-blur transition hover:bg-white"
-                style={{ boxShadow: `0 0 0 1px ${c}22, 0 4px 12px -6px ${c}44` }}
+                aria-label="Itinéraire Google Maps"
+                title="Google Maps"
+                className="flex h-8 w-8 items-center justify-center rounded-full border border-white/60 bg-white/80 shadow-sm backdrop-blur transition hover:bg-white"
+                style={{ boxShadow: `0 0 0 1px ${c}22` }}
               >
-                <GoogleMapsIcon />
-                Google Maps
+                <img src={googleMapsLogo} alt="" width={16} height={16} className="object-contain" />
               </a>
               <a
                 href={citymapperUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center justify-center gap-1.5 rounded-xl border border-white/60 bg-white/80 py-2 text-[13px] font-medium text-gray-800 shadow-sm backdrop-blur transition hover:bg-white"
-                style={{ boxShadow: `0 0 0 1px ${c}22, 0 4px 12px -6px ${c}44` }}
+                aria-label="Itinéraire Citymapper"
+                title="Citymapper"
+                className="flex h-8 w-8 items-center justify-center rounded-full border border-white/60 bg-white/80 shadow-sm backdrop-blur transition hover:bg-white"
+                style={{ boxShadow: `0 0 0 1px ${c}22` }}
               >
-                <CitymapperIcon />
-                Citymapper
+                <img src={citymapperLogo} alt="" width={16} height={16} className="rounded-[4px] object-contain" />
               </a>
             </div>
           </div>

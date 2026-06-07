@@ -1,4 +1,4 @@
-import { createFileRoute, useRouter, useSearch } from "@tanstack/react-router";
+import { createFileRoute, useRouter, useSearch, redirect } from "@tanstack/react-router";
 import { useState } from "react";
 import { z } from "zod";
 import { toast } from "sonner";
@@ -17,11 +17,11 @@ export const Route = createFileRoute("/admin/login")({
   beforeLoad: async ({ search }) => {
     const { authenticated } = await adminMe();
     if (authenticated) {
-      // Redirige vers la cible si on est déjà loggué
-      const to = search.redirect && search.redirect.startsWith("/") ? search.redirect : "/_admin/dashboard";
-      throw Object.assign(new Error("redirect"), {
-        // utiliser window pour éviter complexité de typage
-      }) ?? to;
+      const to =
+        search.redirect && search.redirect.startsWith("/")
+          ? search.redirect
+          : "/_admin/dashboard";
+      throw redirect({ href: to });
     }
   },
   component: LoginPage,

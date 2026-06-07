@@ -486,15 +486,39 @@ export const getVintedGoEnrichmentJobs = createServerFn({ method: "GET" }).handl
 });
 
 export const getVintedGoStats = createServerFn({ method: "GET" }).handler(async () => {
+  const { data: latestQuery } = await supabaseAdmin
+    .from("queries")
+    .select("id")
+    .eq("provider_id", PROVIDER_ID)
+    .eq("status", "success")
+    .gt("inserted_count", 1)
+    .order("finished_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (!latestQuery) {
+    return {
+      total: 0,
+      enriched: 0,
+      pending: 0,
+      inProgress: false,
+      lastOk: null,
+      lastError: null,
+    };
+  }
+  const scopedQueryId = latestQuery.id as string;
+
   const [totalRes, enrichedRes, lastOkRes, lastErrRes, runningRes] = await Promise.all([
     supabaseAdmin
       .from("pickup_points")
       .select("id", { count: "exact", head: true })
-      .eq("provider_id", PROVIDER_ID),
+      .eq("provider_id", PROVIDER_ID)
+      .eq("query_id", scopedQueryId),
     supabaseAdmin
       .from("pickup_points")
       .select("id", { count: "exact", head: true })
       .eq("provider_id", PROVIDER_ID)
+      .eq("query_id", scopedQueryId)
       .not("hours_fetched_at", "is", null),
     supabaseAdmin
       .from("enrichments")
@@ -531,3 +555,4 @@ export const getVintedGoStats = createServerFn({ method: "GET" }).handler(async 
     lastError: lastErrRes.data,
   };
 });
+

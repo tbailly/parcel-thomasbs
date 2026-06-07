@@ -154,34 +154,35 @@ function DashboardPage() {
   );
 }
 
+function refreshRouteForProvider(id: string): string | null {
+  if (id === "mondial_relay") return "/refresh-mondialrelay";
+  if (id === "vinted_go") return "/refresh-vinted";
+  return null;
+}
+
 function ProviderCard({ provider }: { provider: ProviderOverview }) {
+  const refreshRoute = refreshRouteForProvider(provider.id);
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center gap-3 space-y-0">
+    <Card className="flex flex-col justify-between">
+      <CardHeader className="flex flex-row items-center gap-3 space-y-0 pb-3">
         <span
           className="inline-block size-4 shrink-0 rounded-full"
           style={{ backgroundColor: provider.color }}
         />
-        <CardTitle className="text-base">{provider.name}</CardTitle>
+        <CardTitle className="text-sm">{provider.name}</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-2 text-sm">
-        <Row label="Dernier refresh" value={fmtDate(provider.last_query_at)} />
-        <Row
-          label="Points du dernier refresh"
-          value={provider.last_query_inserted ?? "—"}
-        />
-        <Row label="Points actifs" value={provider.active_points} />
+      <CardContent className="space-y-1 text-sm">
+        <div className="text-xl font-semibold tabular-nums">{provider.active_points}</div>
+        <div className="text-xs text-muted-foreground">{fmtDate(provider.last_query_at)}</div>
       </CardContent>
+      <CardFooter className="pt-0">
+        {refreshRoute && (
+          <Button variant="outline" size="sm" className="w-full" asChild>
+            <Link to={refreshRoute}>Refresh</Link>
+          </Button>
+        )}
+      </CardFooter>
     </Card>
-  );
-}
-
-function Row({ label, value }: { label: string; value: React.ReactNode }) {
-  return (
-    <div className="flex items-center justify-between gap-2">
-      <span className="text-muted-foreground">{label}</span>
-      <span className="font-medium">{value}</span>
-    </div>
   );
 }
 

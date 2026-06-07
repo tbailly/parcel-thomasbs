@@ -113,12 +113,12 @@ export function PickupMap({ providers, points, config }: Props) {
     // Center marker
     L.circleMarker([config.center_lat, config.center_lng], {
       radius: 6,
-      color: "#111",
-      fillColor: "#111",
+      color: "#e5e7eb",
+      fillColor: "#e5e7eb",
       fillOpacity: 0.9,
       weight: 2,
     })
-      .bindTooltip(config.center_address, { direction: "top" })
+      .bindTooltip(config.center_address, { direction: "top", className: "bg-gray-800 text-white border border-gray-600" })
       .addTo(map);
 
     const cluster = L.markerClusterGroup({

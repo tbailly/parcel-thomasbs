@@ -309,27 +309,35 @@ export function PickupMap({ providers, points, config, homes }: Props) {
     <div className="relative h-screen w-screen">
       <div ref={containerRef} className="absolute inset-0" aria-label="Carte des points relais" />
 
-      {/* Legend / filter overlay */}
-      <div className="absolute right-3 top-3 z-[400] max-w-[200px] rounded-xl bg-white/95 p-3 shadow-lg backdrop-blur">
-        <div className="mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500">
-          Transporteurs
-        </div>
-        <ul className="space-y-1.5">
-          {providers.map((p) => (
-            <li key={p.id}>
-              <label className="flex cursor-pointer items-center gap-2 text-sm">
-                <input
-                  type="checkbox"
-                  checked={enabled[p.id] ?? true}
-                  onChange={(e) => setEnabled((prev) => ({ ...prev, [p.id]: e.target.checked }))}
-                  className="h-4 w-4 accent-gray-900"
-                />
-                <img src={getProviderLogo(p)} alt="" width={20} height={20} className="rounded-full object-cover" />
-                <span className="truncate" style={{ color: p.color }}>{p.name}</span>
-              </label>
-            </li>
-          ))}
-        </ul>
+      {/* Provider toggles */}
+      <div className="absolute right-3 top-3 z-[400] flex items-center gap-2 rounded-full bg-white/85 px-2.5 py-2 shadow-md backdrop-blur-sm">
+        {providers.map((p) => {
+          const on = enabled[p.id] ?? true;
+          return (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => setEnabled((prev) => ({ ...prev, [p.id]: !on }))}
+              className="relative flex h-8 w-8 items-center justify-center rounded-full transition-all duration-200"
+              style={{
+                backgroundColor: on ? `${p.color}22` : "transparent",
+                boxShadow: on ? `0 0 0 1.5px ${p.color}66, 0 0 8px ${p.color}44` : "inset 0 0 0 1.5px #d1d5db",
+                opacity: on ? 1 : 0.45,
+              }}
+              aria-pressed={on}
+              title={p.name}
+            >
+              <img
+                src={getProviderLogo(p)}
+                alt={p.name}
+                width={18}
+                height={18}
+                className="rounded-full object-cover"
+                style={{ filter: on ? "none" : "grayscale(0.6)" }}
+              />
+            </button>
+          );
+        })}
       </div>
     </div>
   );

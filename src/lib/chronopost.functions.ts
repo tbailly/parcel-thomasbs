@@ -73,39 +73,97 @@ function parseOpeningHours(raw: { day: number; openinghours: string | null }[] |
   return out;
 }
 
+// Extrait le 1er objet JSON valide d'une chaîne (Firecrawl peut renvoyer le JSON
+// wrappé dans du HTML ou markdown selon le format demandé).
+function extractJsonObject(text: string): unknown | null {
+  const t = text.trim();
+  // tentative directe
+  try { return JSON.parse(t); } catch { /* fallthrough */ }
+  // recherche du 1er { ... } équilibré
+  const start = t.indexOf("{");
+  if (start === -1) return null;
+  let depth = 0;
+  let inStr = false;
+  let esc = false;
+  for (let i = start; i < t.length; i++) {
+    const c = t[i];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (c === "\\") esc = true;
+      else if (c === '"') inStr = false;
+      continue;
+    }
+    if (c === '"') { inStr = true; continue; }
+    if (c === "{") depth++;
+    else if (c === "}") {
+      depth--;
+      if (depth === 0) {
+        try { return JSON.parse(t.slice(start, i + 1)); } catch { return null; }
+      }
+    }
+  }
+  return null;
+}
+
 async function fetchOnePoint(lat: number, lng: number, zipcode: string): Promise<{
   points: RawPoint[];
   status: number;
   error: string | null;
 }> {
+  const apiKey = process.env.FIRECRAWL_API_KEY;
+  if (!apiKey) {
+    return { points: [], status: 0, error: "FIRECRAWL_API_KEY missing" };
+  }
   const ts = Date.now();
-  const url =
+  const targetUrl =
     `https://www.chronopost.fr/expeditionAvancee/stubpointsearch.json` +
     `?lat=${encodeURIComponent(lat.toFixed(7))}` +
     `&lon=${encodeURIComponent(lng.toFixed(7))}` +
     `&r=${Math.floor(Math.random() * 900 + 100)}` +
     `&z=${encodeURIComponent(zipcode)}` +
     `&c=&a=&p=FR&lang=null&_=${ts}`;
+
   try {
-    const res = await fetch(url, { method: "GET", headers: HEADERS });
-    const body = await res.text();
+    const res = await fetch("https://api.firecrawl.dev/v2/scrape", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${apiKey}`,
+      },
+      body: JSON.stringify({
+        url: targetUrl,
+        formats: ["rawHtml"],
+        onlyMainContent: false,
+        headers: HEADERS,
+      }),
+    });
+    const fcBody = await res.text();
     if (res.status !== 200) {
-      return { points: [], status: res.status, error: `http ${res.status} ${body.slice(0, 200)}` };
+      return { points: [], status: res.status, error: `firecrawl ${res.status} ${fcBody.slice(0, 200)}` };
     }
-    let parsed: RawResp;
+    let fcJson: { success?: boolean; data?: { rawHtml?: string; markdown?: string; metadata?: { statusCode?: number } }; error?: string };
     try {
-      parsed = JSON.parse(body) as RawResp;
+      fcJson = JSON.parse(fcBody);
     } catch (err) {
-      return { points: [], status: res.status, error: `parse: ${err instanceof Error ? err.message : String(err)}` };
+      return { points: [], status: res.status, error: `firecrawl parse: ${err instanceof Error ? err.message : String(err)}` };
+    }
+    if (!fcJson.success || !fcJson.data) {
+      return { points: [], status: res.status, error: `firecrawl: ${fcJson.error ?? "no data"}` };
+    }
+    const upstreamStatus = fcJson.data.metadata?.statusCode ?? 0;
+    const raw = fcJson.data.rawHtml ?? fcJson.data.markdown ?? "";
+    const parsed = extractJsonObject(raw) as RawResp | null;
+    if (!parsed) {
+      return { points: [], status: upstreamStatus, error: `no json in response (${raw.slice(0, 120)})` };
     }
     if (parsed.errorCode && parsed.errorCode !== 0) {
       return {
         points: [],
-        status: res.status,
+        status: upstreamStatus,
         error: `errorCode=${parsed.errorCode} ${parsed.extraErrorMessage ?? ""}`.slice(0, 200),
       };
     }
-    return { points: parsed.olgiPointList ?? [], status: res.status, error: null };
+    return { points: parsed.olgiPointList ?? [], status: upstreamStatus, error: null };
   } catch (err) {
     return { points: [], status: 0, error: err instanceof Error ? err.message : String(err) };
   }

@@ -1,7 +1,8 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 import { queryOptions, useSuspenseQuery } from "@tanstack/react-query";
 import { lazy, Suspense } from "react";
 import { getMapData } from "@/lib/pickup-points.functions";
+import { adminMe } from "@/lib/admin-auth.functions";
 
 const PickupMap = lazy(() =>
   import("@/components/PickupMap").then((m) => ({ default: m.PickupMap })),
@@ -13,6 +14,16 @@ const mapDataQueryOptions = queryOptions({
 });
 
 export const Route = createFileRoute("/")({
+  ssr: false,
+  beforeLoad: async ({ location }) => {
+    const { authenticated } = await adminMe();
+    if (!authenticated) {
+      throw redirect({
+        to: "/admin/login",
+        search: { redirect: location.href },
+      });
+    }
+  },
   head: () => ({
     meta: [
       { title: "Carte des points relais — Paris & petite couronne" },

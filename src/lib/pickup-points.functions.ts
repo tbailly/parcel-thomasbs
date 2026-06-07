@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { requireAdmin } from "./admin-auth.functions";
 
 export type OpeningSlot = { open: string; close: string };
 export type OpeningHours = Partial<Record<"mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun", OpeningSlot[]>>;
@@ -38,7 +39,9 @@ export type HomeAddress = {
   lng: number;
 };
 
-export const getMapData = createServerFn({ method: "GET" }).handler(async () => {
+export const getMapData = createServerFn({ method: "GET" })
+  .middleware([requireAdmin])
+  .handler(async () => {
   const [providersRes, pointsRes, configRes, homesRes] = await Promise.all([
     supabaseAdmin.from("providers").select("id, name, logo_url, color"),
     supabaseAdmin

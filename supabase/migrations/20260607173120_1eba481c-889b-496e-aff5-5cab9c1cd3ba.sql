@@ -1,0 +1,1 @@
+UPDATE public.providers SET color='#008FD2' WHERE id='chronopost';

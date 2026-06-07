@@ -10,7 +10,7 @@ export const Route = createFileRoute("/api/public/refresh-pudos")({
           {
             status: "not_implemented",
             message:
-              "Provider integrations (Mondial Relay, Vinted Go, Chronopost, Shop2Shop) not connected yet.",
+              "Provider integrations (Mondial Relay, Vinted Go, Chronopost) not connected yet.",
           },
           { status: 501 },
         );

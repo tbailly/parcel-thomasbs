@@ -1,0 +1,1 @@
+DELETE FROM public.providers WHERE id = 'shop2shop';

@@ -19,7 +19,7 @@ export const Route = createFileRoute("/")({
       {
         name: "description",
         content:
-          "Carte interactive des lockers et points de dépôt de colis (Mondial Relay, Vinted Go, Chronopost, Shop2Shop) à Paris, dans les Hauts-de-Seine et la Seine-Saint-Denis.",
+          "Carte interactive des lockers et points de dépôt de colis (Mondial Relay, Vinted Go, Chronopost) à Paris, dans les Hauts-de-Seine et la Seine-Saint-Denis.",
       },
       { property: "og:title", content: "Carte des points relais — 75 / 92 / 93" },
       {

@@ -59,11 +59,7 @@ function RefreshChronopostPage() {
       <header className="space-y-1">
         <h1 className="text-2xl font-semibold">Chronopost</h1>
         <p className="text-sm text-muted-foreground">
-          1 requête par adresse maison sur l'API publique{" "}
-          <code className="text-xs">stubpointsearch.json</code> de chronopost.fr.
-          Chaque requête remonte ~30 points autour de l'adresse (rayon ~9 km),
-          horaires incluses. Upsert par identifiant point relais — relance
-          idempotente.
+          Rafraîchit les points relais autour de chaque adresse maison.
         </p>
       </header>
 

@@ -118,6 +118,8 @@ function DashboardPage() {
             <Link to="/refresh-mondialrelay" className="text-muted-foreground hover:text-foreground">Refresh MR</Link>
             <span className="text-muted-foreground">·</span>
             <Link to="/refresh-vinted" className="text-muted-foreground hover:text-foreground">Vinted Go</Link>
+            <span className="text-muted-foreground">·</span>
+            <Link to="/refresh-chronopost" className="text-muted-foreground hover:text-foreground">Chronopost</Link>
           </nav>
         </div>
       </header>
@@ -157,6 +159,7 @@ function DashboardPage() {
 function refreshRouteForProvider(id: string): string | null {
   if (id === "mondial_relay") return "/refresh-mondialrelay";
   if (id === "vinted_go") return "/refresh-vinted";
+  if (id === "chronopost") return "/refresh-chronopost";
   return null;
 }
 

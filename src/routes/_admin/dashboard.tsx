@@ -42,7 +42,7 @@ const overviewQO = queryOptions({
   refetchInterval: 10_000,
 });
 
-export const Route = createFileRoute("/dashboard")({
+export const Route = createFileRoute("/_admin/dashboard")({
   head: () => ({
     meta: [
       { title: "Dashboard admin" },

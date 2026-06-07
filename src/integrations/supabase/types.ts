@@ -41,6 +41,36 @@ export type Database = {
         }
         Relationships: []
       }
+      enrichments: {
+        Row: {
+          created_at: string
+          error: string | null
+          external_id: string | null
+          id: string
+          point_id: string | null
+          provider_id: string
+          status: string
+        }
+        Insert: {
+          created_at?: string
+          error?: string | null
+          external_id?: string | null
+          id?: string
+          point_id?: string | null
+          provider_id: string
+          status: string
+        }
+        Update: {
+          created_at?: string
+          error?: string | null
+          external_id?: string | null
+          id?: string
+          point_id?: string | null
+          provider_id?: string
+          status?: string
+        }
+        Relationships: []
+      }
       home_addresses: {
         Row: {
           country: string
@@ -82,6 +112,7 @@ export type Database = {
           address: string
           city: string
           external_id: string | null
+          hours_fetched_at: string | null
           id: string
           lat: number
           lng: number
@@ -97,6 +128,7 @@ export type Database = {
           address: string
           city: string
           external_id?: string | null
+          hours_fetched_at?: string | null
           id?: string
           lat: number
           lng: number
@@ -112,6 +144,7 @@ export type Database = {
           address?: string
           city?: string
           external_id?: string | null
+          hours_fetched_at?: string | null
           id?: string
           lat?: number
           lng?: number

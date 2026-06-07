@@ -9,7 +9,6 @@ import { getProviderLogo } from "@/lib/provider-logos";
 import googleMapsLogo from "@/assets/apps/google-maps.png";
 import citymapperLogo from "@/assets/apps/citymapper.png";
 import { Drawer, DrawerContent, DrawerTitle, DrawerDescription } from "@/components/ui/drawer";
-import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 
 type Props = {
   providers: Provider[];

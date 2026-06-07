@@ -104,21 +104,22 @@ export function PickupMap({ providers, points, config }: Props) {
       zoom: config.default_zoom,
       zoomControl: true,
     });
-    L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
+    L.tileLayer("https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png", {
       attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/attributions">CARTO</a>',
       subdomains: "abcd",
       maxZoom: 20,
+      className: "pudo-tiles-beige",
     }).addTo(map);
 
     // Center marker
     L.circleMarker([config.center_lat, config.center_lng], {
       radius: 6,
-      color: "#e5e7eb",
-      fillColor: "#e5e7eb",
+      color: "#1f2937",
+      fillColor: "#1f2937",
       fillOpacity: 0.9,
       weight: 2,
     })
-      .bindTooltip(config.center_address, { direction: "top", className: "bg-gray-800 text-white border border-gray-600" })
+      .bindTooltip(config.center_address, { direction: "top" })
       .addTo(map);
 
     const cluster = L.markerClusterGroup({

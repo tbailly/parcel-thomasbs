@@ -142,3 +142,8 @@
     color: var(--color-foreground);
   }
 }
+
+/* Carte : tuiles CARTO Positron retintées en beige/gris clair monochrome */
+.pudo-tiles-beige {
+  filter: sepia(0.35) saturate(0.7) hue-rotate(-8deg) brightness(1.02) contrast(0.95);
+}

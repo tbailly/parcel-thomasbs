@@ -20,7 +20,7 @@ export const Route = createFileRoute("/admin/login")({
       const to =
         search.redirect && search.redirect.startsWith("/")
           ? search.redirect
-          : "/_admin/dashboard";
+          : "/dashboard";
       throw redirect({ href: to });
     }
   },
@@ -43,7 +43,7 @@ function LoginPage() {
       const target =
         search.redirect && search.redirect.startsWith("/")
           ? search.redirect
-          : "/_admin/dashboard";
+          : "/dashboard";
       window.location.href = target;
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erreur");

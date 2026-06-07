@@ -22,7 +22,7 @@ function AdminLayout() {
   const handleLogout = async () => {
     await adminLogout();
     await router.invalidate();
-    router.navigate({ to: "/admin/login" });
+    window.location.href = "/admin/login";
   };
 
   return (
@@ -30,16 +30,16 @@ function AdminLayout() {
       <header className="border-b bg-card">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
           <nav className="flex items-center gap-4 text-sm">
-            <Link to="/_admin/dashboard" className="font-semibold hover:underline">
+            <Link to="/dashboard" className="font-semibold hover:underline">
               Dashboard
             </Link>
-            <Link to="/_admin/refresh-chronopost" className="text-muted-foreground hover:underline">
+            <Link to="/refresh-chronopost" className="text-muted-foreground hover:underline">
               Chronopost
             </Link>
-            <Link to="/_admin/refresh-mondialrelay" className="text-muted-foreground hover:underline">
+            <Link to="/refresh-mondialrelay" className="text-muted-foreground hover:underline">
               Mondial Relay
             </Link>
-            <Link to="/_admin/refresh-vinted" className="text-muted-foreground hover:underline">
+            <Link to="/refresh-vinted" className="text-muted-foreground hover:underline">
               Vinted Go
             </Link>
           </nav>

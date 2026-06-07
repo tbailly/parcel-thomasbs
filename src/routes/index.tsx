@@ -59,7 +59,7 @@ function Index() {
         </div>
       }
     >
-      <PickupMap providers={data.providers} points={data.points} config={data.config} />
+      <PickupMap providers={data.providers} points={data.points} config={data.config} homes={data.homes} />
     </Suspense>
   );
 }

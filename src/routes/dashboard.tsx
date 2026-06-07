@@ -3,7 +3,7 @@ import { queryOptions, useSuspenseQuery, useQuery, useQueryClient } from "@tanst
 import { useServerFn } from "@tanstack/react-start";
 import { useState } from "react";
 import { toast } from "sonner";
-import { ChevronDown, ChevronRight, Trash2 } from "lucide-react";
+import { Check, ChevronDown, ChevronRight, Sparkles, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -28,12 +28,12 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Badge } from "@/components/ui/badge";
 import {
+  cleanupOrphans,
   deleteQuery,
   getDashboardOverview,
   getProviderQueries,
   getQueryPoints,
   type ProviderOverview,
-  type ProviderQuery,
 } from "@/lib/dashboard.functions";
 
 const overviewQO = queryOptions({
@@ -62,23 +62,64 @@ function DashboardPage() {
   const { data } = useSuspenseQuery(overviewQO);
   const providers = data.providers;
   const [activeTab, setActiveTab] = useState<string>(providers[0]?.id ?? "");
+  const qc = useQueryClient();
+  const cleanupFn = useServerFn(cleanupOrphans);
+  const [cleaning, setCleaning] = useState(false);
+
+  const handleCleanup = async () => {
+    setCleaning(true);
+    try {
+      const res = await cleanupFn();
+      toast.success(
+        `Cleanup : ${res.deleted_points} points orphelins, ${res.deleted_enrichments} enrichments`,
+      );
+      qc.invalidateQueries({ queryKey: ["dashboard-overview"] });
+      qc.invalidateQueries({ queryKey: ["provider-queries"] });
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : String(e));
+    } finally {
+      setCleaning(false);
+    }
+  };
 
   return (
     <main className="mx-auto max-w-7xl space-y-8 p-6">
-      <header className="flex items-end justify-between gap-4">
+      <header className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-3xl font-semibold tracking-tight">Dashboard</h1>
           <p className="text-sm text-muted-foreground">
             État des providers, historique des queries et points associés.
           </p>
         </div>
-        <nav className="flex gap-2 text-sm">
-          <Link to="/" className="text-muted-foreground hover:text-foreground">Carte</Link>
-          <span className="text-muted-foreground">·</span>
-          <Link to="/refresh" className="text-muted-foreground hover:text-foreground">Refresh manuel</Link>
-          <span className="text-muted-foreground">·</span>
-          <Link to="/refresh-vinted" className="text-muted-foreground hover:text-foreground">Vinted Go</Link>
-        </nav>
+        <div className="flex items-center gap-4">
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="outline" size="sm" disabled={cleaning}>
+                <Sparkles className="mr-2 size-4" />
+                Nettoyer les orphelins
+              </Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Nettoyer les orphelins ?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Supprime les points relais sans query rattachée et les enrichments sans point.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Annuler</AlertDialogCancel>
+                <AlertDialogAction onClick={handleCleanup}>Nettoyer</AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
+          <nav className="flex gap-2 text-sm">
+            <Link to="/" className="text-muted-foreground hover:text-foreground">Carte</Link>
+            <span className="text-muted-foreground">·</span>
+            <Link to="/refresh" className="text-muted-foreground hover:text-foreground">Refresh</Link>
+            <span className="text-muted-foreground">·</span>
+            <Link to="/refresh-vinted" className="text-muted-foreground hover:text-foreground">Vinted Go</Link>
+          </nav>
+        </div>
       </header>
 
       <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -126,24 +167,10 @@ function ProviderCard({ provider }: { provider: ProviderOverview }) {
       <CardContent className="space-y-2 text-sm">
         <Row label="Dernier refresh" value={fmtDate(provider.last_query_at)} />
         <Row
-          label="Statut"
-          value={
-            provider.last_query_status ? (
-              <Badge
-                variant={provider.last_query_status === "success" ? "default" : "destructive"}
-              >
-                {provider.last_query_status}
-              </Badge>
-            ) : (
-              "—"
-            )
-          }
-        />
-        <Row
           label="Points du dernier refresh"
           value={provider.last_query_inserted ?? "—"}
         />
-        <Row label="Total points actuels" value={provider.total_points} />
+        <Row label="Points actifs" value={provider.active_points} />
       </CardContent>
     </Card>
   );
@@ -196,9 +223,8 @@ function ProviderQueriesTable({ providerId }: { providerId: string }) {
             <TableHead>Date</TableHead>
             <TableHead>Statut</TableHead>
             <TableHead>Code postal</TableHead>
-            <TableHead className="text-right">Raw</TableHead>
-            <TableHead className="text-right">Insérés</TableHead>
-            <TableHead className="text-right">Points actuels</TableHead>
+            <TableHead className="text-right">Points</TableHead>
+            <TableHead className="text-right">Sans horaires</TableHead>
             <TableHead>Erreur</TableHead>
             <TableHead className="w-12" />
           </TableRow>
@@ -219,9 +245,12 @@ function ProviderQueriesTable({ providerId }: { providerId: string }) {
                     </Badge>
                   </TableCell>
                   <TableCell className="font-mono text-xs">{q.postal_code ?? "—"}</TableCell>
-                  <TableCell className="text-right tabular-nums">{q.raw_count}</TableCell>
-                  <TableCell className="text-right tabular-nums">{q.inserted_count}</TableCell>
                   <TableCell className="text-right tabular-nums">{q.current_point_count}</TableCell>
+                  <TableCell className="text-right tabular-nums">
+                    <span className={q.missing_hours_count > 0 ? "text-destructive" : "text-muted-foreground"}>
+                      {q.missing_hours_count}
+                    </span>
+                  </TableCell>
                   <TableCell className="max-w-xs truncate text-xs text-muted-foreground" title={q.error ?? ""}>
                     {q.error ?? "—"}
                   </TableCell>
@@ -234,7 +263,7 @@ function ProviderQueriesTable({ providerId }: { providerId: string }) {
                 </TableRow>
                 {isOpen && (
                   <TableRow key={`${q.id}-points`}>
-                    <TableCell colSpan={9} className="bg-muted/30 p-0">
+                    <TableCell colSpan={8} className="bg-muted/30 p-0">
                       <QueryPointsList queryId={q.id} />
                     </TableCell>
                   </TableRow>
@@ -296,7 +325,7 @@ function QueryPointsList({ queryId }: { queryId: string }) {
             <TableHead>Ville</TableHead>
             <TableHead className="text-right">Lat</TableHead>
             <TableHead className="text-right">Lng</TableHead>
-            <TableHead>Horaires</TableHead>
+            <TableHead className="text-center">Horaires</TableHead>
             <TableHead>Notes</TableHead>
           </TableRow>
         </TableHeader>
@@ -310,8 +339,12 @@ function QueryPointsList({ queryId }: { queryId: string }) {
               <TableCell className="text-xs">{p.city}</TableCell>
               <TableCell className="text-right font-mono text-xs">{p.lat.toFixed(5)}</TableCell>
               <TableCell className="text-right font-mono text-xs">{p.lng.toFixed(5)}</TableCell>
-              <TableCell className="text-xs">
-                {p.hours_fetched_at ? fmtDate(p.hours_fetched_at) : <span className="text-muted-foreground">en attente</span>}
+              <TableCell className="text-center">
+                {p.has_hours ? (
+                  <Check className="mx-auto size-4 text-emerald-500" aria-label="Horaires présents" />
+                ) : (
+                  <X className="mx-auto size-4 text-destructive" aria-label="Pas d'horaires" />
+                )}
               </TableCell>
               <TableCell className="max-w-[12rem] truncate text-xs text-muted-foreground" title={p.notes ?? ""}>
                 {p.notes ?? "—"}
@@ -323,5 +356,3 @@ function QueryPointsList({ queryId }: { queryId: string }) {
     </div>
   );
 }
-
-type _Q = ProviderQuery;

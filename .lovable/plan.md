@@ -1,50 +1,48 @@
-## Objectif
+## Contexte
 
-Créer `/dashboard` : page d'administration unique consolidant l'état des providers et l'inspection des queries/points, avec suppression en cascade.
+- La cascade FK est bien en place : `pickup_points.query_id → queries(id) ON DELETE CASCADE` et `enrichments.point_id → pickup_points(id) ON DELETE CASCADE`. La suppression d'une query supprime bien ses points.
+- Si tu n'as pas vu de cascade, c'est que les 173 points orphelins (chronopost: 5, shop2shop: 6, mondial_relay: 162) ont `query_id = NULL` — ils ont été insérés avant qu'on tracke la `query_id` et ne sont rattachés à aucune query, donc rien à cascader.
+- `latest_pickup_points` est une vue qui filtre les points de la dernière query "success" par provider. C'est notre définition d'"actifs".
 
-## 1. Migrations DB
+## 1. Dashboard — affichage
 
-**Cascades** (FK actuellement absentes) :
-- `pickup_points.query_id` → `queries(id) ON DELETE CASCADE`
-- `enrichments.point_id` → `pickup_points(id) ON DELETE CASCADE`
-- Nettoyer au préalable les orphelins éventuels avant de poser les FK.
+**Cartes provider** (`getDashboardOverview` + UI) :
 
-**Grants** : ajouter `DELETE` sur `queries` au rôle `service_role` (déjà OK car `supabaseAdmin` = service role, mais on s'assure des grants ON sequences/tables).
+- Remplacer `total_points` (compte brut sur `pickup_points`) par un compte sur `latest_pickup_points` filtré par provider → `active_points`.
+- Supprimer la ligne "Statut" et le champ `last_query_status` du DTO/UI.
+- Garder : date du dernier refresh, points du dernier refresh, total points actifs.
 
-## 2. Server functions (`src/lib/dashboard.functions.ts`)
+**Table des queries** (`getProviderQueries` + UI) :
 
-- `getDashboardOverview()` : pour chaque provider, dernière query (`max(finished_at)`) + `inserted_count` + `total points actuels`.
-- `getProviderQueries({ provider_id })` : liste des queries triées DESC avec `nb points actuellement rattachés` (count via `pickup_points.query_id`).
-- `getQueryPoints({ query_id })` : tous les points liés (pas de pagination, KISS).
-- `deleteQuery({ query_id })` : `DELETE FROM queries WHERE id = ?` (la cascade s'occupe du reste).
+- Retirer les colonnes "Raw" et "Insérés".
+- Ajouter une colonne "Sans horaires" = nombre de points de la query dont `opening_hours = '{}'::jsonb` (ou hours_fetched_at NULL — on retient `opening_hours` vide car c'est ce que l'UI montre).
+- Garder : Date, Statut, CP, Points actuels (rattachés à cette query), Sans horaires, Erreur, Supprimer.
+- Calcul : étendre le `GROUP BY query_id` actuel pour ramener aussi le count avec `opening_hours = '{}'`.
 
-Tout via `supabaseAdmin` (admin tool interne).
+**Sous-table des points d'une query** :
 
-## 3. Route `/dashboard` (`src/routes/dashboard.tsx`)
+- Colonne "Horaires" : pastille verte (`opening_hours_json !== "{}"`) ou rouge sinon — remplace la date `hours_fetched_at`. Utiliser un point coloré + icône check/x lucide.
 
-Structure :
-- **Header** : titre + liens rapides vers `/refresh` et `/refresh-vinted` (on garde ces pages telles quelles, le dashboard ne les remplace pas).
-- **Section cartes providers** (grid responsive) : une `Card` par provider avec
-  - Nom + pastille couleur + logo
-  - Date du dernier refresh (`finished_at` formaté)
-  - Nombre de points du dernier refresh (`inserted_count`)
-  - Total de points actuels
-- **Section tabs** : un `Tabs` (shadcn) avec une `TabsTrigger` par provider.
-  - Dans chaque `TabsContent`, une `Table` des queries (date, status, raw_count, inserted_count, nb points actuels, erreur tronquée, bouton 🗑).
-  - Chaque ligne est expandable (state local `expandedQueryId`) → fetch à la demande (`useQuery` keyé sur `query_id`) des points et affichage dans une sous-`Table` (id court, external_id, name, address, postal_code, city, lat/lng, hours_fetched_at).
-  - Bouton supprimer → `AlertDialog` de confirmation → `deleteQuery` → invalide les queries.
+## 2. Mécanique — cleanup
 
-Tout reste KISS : pas de virtualization, pas de pagination, refetch simple.
+Nouveau server fn `cleanupOrphans()` dans `src/lib/dashboard.functions.ts` :
 
-## 4. Hors scope
+- Supprime les `pickup_points` où `query_id IS NULL` OU dont le `query_id` ne référence plus aucune query (defensive, même si la FK l'empêche).
+- Les enrichments associés tombent en cascade. Supprime aussi les enrichments avec `point_id IS NULL` ou pointant dans le vide.
+- Renvoie `{ deleted_points, deleted_enrichments }`.
 
-- Pas de changement à `PickupMap`, `/`, `/refresh`, `/refresh-vinted`.
-- Pas de RLS modifiée (tout est lu via `supabaseAdmin` côté server-fn).
-- Pas d'auth sur `/dashboard` (cohérent avec `/refresh` actuel).
+**UI** : bouton "Nettoyer les orphelins" dans le header du dashboard, avec `AlertDialog` de confirmation et toast résultat. Invalide `dashboard-overview` et les listes de queries.
+
+**Exécution one-shot** : lancer un `DELETE FROM pickup_points WHERE query_id IS NULL` via outil migration/insert pour purger immédiatement les 173 points actuels (les enrichments tombent en cascade).
 
 ## Détails techniques
 
-- Tabs + Table + Card + AlertDialog déjà disponibles dans `components/ui`.
-- Pour les counts par query, une seule requête `SELECT query_id, count(*) FROM pickup_points GROUP BY query_id` filtrée par provider est suffisante.
-- Cascade FK : `ALTER TABLE` avec `DROP CONSTRAINT IF EXISTS` puis `ADD CONSTRAINT ... REFERENCES ... ON DELETE CASCADE`.
-- Les points actuels « du dernier refresh » = ceux dont `query_id = last_query.id` (cohérent avec l'insertion). Pour Vinted Go (upsert), `query_id` est mis à jour à chaque refresh, donc le count reste correct.
+- `getDashboardOverview` : remplacer le `head:true count exact` sur `pickup_points` par un count sur `latest_pickup_points` filtré `provider_id`. Retirer `last_query_status`.
+- `getProviderQueries` : faire deux passes sur `pickup_points` par les `query_id` listés — une pour le count total, une pour le count `opening_hours = '{}'`. Comme PostgREST ne fait pas `jsonb='{}'` facilement, faire une `select query_id, opening_hours` et agréger côté JS (volume limité aux ~500 dernières queries × ~50 points moyens, OK pour KISS).
+- `dashboard.tsx` : retirer la colonne Raw/Insérés, ajouter "Sans horaires", remplacer la cellule horaires du sous-tableau par un badge vert/rouge, retirer la ligne statut des cartes, ajouter le bouton cleanup.
+
+## Hors scope
+
+- Pas de changement à `latest_pickup_points`, `PickupMap`, `/refresh`, `/refresh-vinted`, `/api/public/hooks/enrich-vinted-go`.
+- Pas de pagination/virtualisation.
+- Pas d'auth sur `/dashboard` ni sur le cleanup (suit le pattern actuel).

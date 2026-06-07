@@ -4,11 +4,12 @@ import "leaflet/dist/leaflet.css";
 import "leaflet.markercluster";
 import "leaflet.markercluster/dist/MarkerCluster.css";
 import "leaflet.markercluster/dist/MarkerCluster.Default.css";
-import { X } from "lucide-react";
 import type { AppConfig, HomeAddress, OpeningHours, PickupPoint, Provider } from "@/lib/pickup-points.functions";
 import { getProviderLogo } from "@/lib/provider-logos";
 import googleMapsLogo from "@/assets/apps/google-maps.png";
 import citymapperLogo from "@/assets/apps/citymapper.png";
+import { Drawer, DrawerContent, DrawerTitle, DrawerDescription } from "@/components/ui/drawer";
+import { VisuallyHidden } from "@radix-ui/react-visually-hidden";
 
 type Props = {
   providers: Provider[];

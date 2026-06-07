@@ -1,7 +1,8 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 import { queryOptions, useSuspenseQuery } from "@tanstack/react-query";
 import { lazy, Suspense } from "react";
 import { getMapData } from "@/lib/pickup-points.functions";
+import { adminMe } from "@/lib/admin-auth.functions";
 
 const PickupMap = lazy(() =>
   import("@/components/PickupMap").then((m) => ({ default: m.PickupMap })),

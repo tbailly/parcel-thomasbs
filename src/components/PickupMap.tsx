@@ -242,7 +242,7 @@ export function PickupMap({ providers, points, config }: Props) {
       markers.push(marker);
     }
     cluster.addLayers(markers);
-  }, [points, enabled, providerById]);
+  }, [points, enabled, providerById, variant]);
 
   return (
     <div className="relative h-screen w-screen">

@@ -14,6 +14,16 @@ const mapDataQueryOptions = queryOptions({
 });
 
 export const Route = createFileRoute("/")({
+  ssr: false,
+  beforeLoad: async ({ location }) => {
+    const { authenticated } = await adminMe();
+    if (!authenticated) {
+      throw redirect({
+        to: "/admin/login",
+        search: { redirect: location.href },
+      });
+    }
+  },
   head: () => ({
     meta: [
       { title: "Carte des points relais — Paris & petite couronne" },

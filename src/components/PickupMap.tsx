@@ -60,9 +60,9 @@ function buildPopupHtml(point: PickupPoint, provider: Provider): string {
   `;
 }
 
-type PinVariant = "holo" | "neon" | "glass";
-
 const PIN_SIZE = 48;
+const CLUSTER_SIZE = 56;
+const DEFAULT_DOT_COLOR = "#374151"; // gris profond
 
 function buildHoloDiamond(provider: Provider, logo: string, uid: string): string {
   const c = provider.color;
@@ -95,67 +95,11 @@ function buildHoloDiamond(provider: Provider, logo: string, uid: string): string
     </svg>`;
 }
 
-function buildNeonCrystal(provider: Provider, logo: string, uid: string): string {
-  const c = provider.color;
-  return `
-    <svg width="${PIN_SIZE}" height="${PIN_SIZE}" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" style="display:block;overflow:visible">
-      <defs>
-        <filter id="nf-${uid}" x="-50%" y="-50%" width="200%" height="200%">
-          <feGaussianBlur stdDeviation="2.8" result="b1"/>
-          <feMerge><feMergeNode in="b1"/><feMergeNode in="b1"/><feMergeNode in="SourceGraphic"/></feMerge>
-        </filter>
-        <clipPath id="nc-${uid}"><circle cx="24" cy="24" r="8.5"/></clipPath>
-      </defs>
-      <path d="M24 5 L43 24 L24 43 L5 24 Z" fill="none" stroke="${c}" stroke-width="2" stroke-linejoin="round" opacity="0.55" filter="url(#nf-${uid})"/>
-      <path d="M24 5 L43 24 L24 43 L5 24 Z" fill="rgba(15,23,42,0.06)" stroke="${c}" stroke-width="1.75" stroke-linejoin="round"/>
-      <circle cx="24" cy="24" r="9" fill="#0f172a" fill-opacity="0.88" stroke="${c}" stroke-width="0.75" stroke-opacity="0.7"/>
-      <image href="${logo}" x="15.5" y="15.5" width="17" height="17" clip-path="url(#nc-${uid})" preserveAspectRatio="xMidYMid slice" style="filter:brightness(1.6) contrast(0.9)"/>
-    </svg>`;
-}
-
-function buildGlassPrism(provider: Provider, logo: string, uid: string): string {
-  const c = provider.color;
-  return `
-    <svg width="${PIN_SIZE}" height="${PIN_SIZE}" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" style="display:block;overflow:visible">
-      <defs>
-        <linearGradient id="gg-${uid}" x1="0" y1="0" x2="1" y2="1">
-          <stop offset="0" stop-color="#ffffff" stop-opacity="0.85"/>
-          <stop offset="0.55" stop-color="#ffffff" stop-opacity="0.45"/>
-          <stop offset="1" stop-color="${c}" stop-opacity="0.25"/>
-        </linearGradient>
-        <linearGradient id="gs-${uid}" x1="0" y1="0" x2="1" y2="0.6">
-          <stop offset="0" stop-color="#ffffff" stop-opacity="0.9"/>
-          <stop offset="0.5" stop-color="#ffffff" stop-opacity="0"/>
-        </linearGradient>
-        <filter id="gf-${uid}" x="-50%" y="-50%" width="200%" height="200%">
-          <feGaussianBlur stdDeviation="1.8" result="b"/>
-          <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
-        </filter>
-        <clipPath id="gc-${uid}"><circle cx="24" cy="24" r="9"/></clipPath>
-        <clipPath id="gd-${uid}"><path d="M24 5 L43 24 L24 43 L5 24 Z"/></clipPath>
-      </defs>
-      <path d="M24 5 L43 24 L24 43 L5 24 Z" fill="${c}" opacity="0.25" filter="url(#gf-${uid})"/>
-      <path d="M24 5 L43 24 L24 43 L5 24 Z" fill="url(#gg-${uid})" stroke="#ffffff" stroke-width="1.25" stroke-linejoin="round"/>
-      <g clip-path="url(#gd-${uid})">
-        <path d="M24 5 L43 24 L24 24 Z" fill="url(#gs-${uid})"/>
-      </g>
-      <path d="M24 5 L43 24 L24 43 L5 24 Z" fill="none" stroke="${c}" stroke-width="0.9" stroke-linejoin="round" opacity="0.85"/>
-      <circle cx="24" cy="24" r="9.5" fill="#ffffff" fill-opacity="0.7"/>
-      <image href="${logo}" x="15" y="15" width="18" height="18" clip-path="url(#gc-${uid})" preserveAspectRatio="xMidYMid slice"/>
-      <circle cx="36" cy="36" r="2.6" fill="${c}" stroke="#ffffff" stroke-width="0.9"/>
-    </svg>`;
-}
-
 let pinUidCounter = 0;
-function makeIcon(provider: Provider, variant: PinVariant): L.DivIcon {
+function makeIcon(provider: Provider): L.DivIcon {
   const logo = getProviderLogo(provider);
-  const uid = `${variant}-${provider.id}-${++pinUidCounter}`;
-  const html =
-    variant === "holo"
-      ? buildHoloDiamond(provider, logo, uid)
-      : variant === "neon"
-      ? buildNeonCrystal(provider, logo, uid)
-      : buildGlassPrism(provider, logo, uid);
+  const uid = `holo-${provider.id}-${++pinUidCounter}`;
+  const html = buildHoloDiamond(provider, logo, uid);
   return L.divIcon({
     className: "pudo-pin",
     html: `<div style="filter:drop-shadow(0 2px 4px rgba(0,0,0,0.25))">${html}</div>`,
@@ -165,6 +109,47 @@ function makeIcon(provider: Provider, variant: PinVariant): L.DivIcon {
   });
 }
 
+function buildClusterDiamond(count: number, providerColors: string[], uid: string): string {
+  // Dots: one per provider present (any count), aligned horizontally inside the diamond's center disc.
+  const dotR = 2.6;
+  const gap = 7;
+  const total = providerColors.length;
+  const startX = 28 - ((total - 1) * gap) / 2;
+  const dots = providerColors
+    .map((c, i) => `<circle cx="${startX + i * gap}" cy="38" r="${dotR}" fill="${c}" stroke="#ffffff" stroke-width="0.7"/>`)
+    .join("");
+
+  return `
+    <svg width="${CLUSTER_SIZE}" height="${CLUSTER_SIZE}" viewBox="0 0 56 56" xmlns="http://www.w3.org/2000/svg" style="display:block;overflow:visible">
+      <defs>
+        <linearGradient id="cl-l-${uid}" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#ffffff"/>
+          <stop offset="1" stop-color="${DEFAULT_DOT_COLOR}" stop-opacity="0.14"/>
+        </linearGradient>
+        <linearGradient id="cl-r-${uid}" x1="1" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#e5e7eb"/>
+          <stop offset="1" stop-color="${DEFAULT_DOT_COLOR}" stop-opacity="0.22"/>
+        </linearGradient>
+        <filter id="cl-f-${uid}" x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation="2.8" result="b"/>
+          <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+      </defs>
+      <g filter="url(#cl-f-${uid})">
+        <path d="M28 4 L52 28 L28 52 L4 28 Z" fill="${DEFAULT_DOT_COLOR}" opacity="0.35"/>
+      </g>
+      <path d="M28 4 L28 52 L4 28 Z" fill="url(#cl-l-${uid})"/>
+      <path d="M28 4 L52 28 L28 52 Z" fill="url(#cl-r-${uid})"/>
+      <path d="M28 4 L52 28 L28 52 L4 28 Z" fill="none" stroke="${DEFAULT_DOT_COLOR}" stroke-width="1.6" stroke-linejoin="round"/>
+      <circle cx="28" cy="26" r="13" fill="#fafafa" stroke="${DEFAULT_DOT_COLOR}" stroke-width="0.8" stroke-opacity="0.45"/>
+      <text x="28" y="30" text-anchor="middle" font-family="ui-sans-serif,system-ui,sans-serif" font-size="13" font-weight="700" fill="#111827">${count}</text>
+      ${dots}
+      <path d="M28 2 L30 4 L26 4 Z M54 28 L52 30 L52 26 Z M28 54 L26 52 L30 52 Z M2 28 L4 26 L4 30 Z" fill="${DEFAULT_DOT_COLOR}" opacity="0.75"/>
+    </svg>`;
+}
+
+let clusterUidCounter = 0;
+
 export function PickupMap({ providers, points, config }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
@@ -172,13 +157,6 @@ export function PickupMap({ providers, points, config }: Props) {
   const [enabled, setEnabled] = useState<Record<string, boolean>>(
     () => Object.fromEntries(providers.map((p) => [p.id, true])),
   );
-  const [variant, setVariant] = useState<PinVariant>(() => {
-    if (typeof window === "undefined") return "holo";
-    return (localStorage.getItem("pin-variant") as PinVariant) || "holo";
-  });
-  useEffect(() => {
-    if (typeof window !== "undefined") localStorage.setItem("pin-variant", variant);
-  }, [variant]);
 
   const providerById = useMemo(
     () => Object.fromEntries(providers.map((p) => [p.id, p])),
@@ -215,6 +193,24 @@ export function PickupMap({ providers, points, config }: Props) {
       showCoverageOnHover: false,
       spiderfyOnMaxZoom: true,
       maxClusterRadius: 45,
+      iconCreateFunction: (clusterLayer) => {
+        const childMarkers = clusterLayer.getAllChildMarkers();
+        const seen = new Map<string, string>(); // provider_id -> color, preserve insertion order
+        for (const m of childMarkers) {
+          const pid = (m.options as { providerId?: string }).providerId;
+          const color = (m.options as { providerColor?: string }).providerColor;
+          if (pid && color && !seen.has(pid)) seen.set(pid, color);
+        }
+        const colors = Array.from(seen.values());
+        const uid = `c-${++clusterUidCounter}`;
+        const html = buildClusterDiamond(childMarkers.length, colors, uid);
+        return L.divIcon({
+          className: "pudo-cluster",
+          html: `<div style="filter:drop-shadow(0 2px 5px rgba(0,0,0,0.28))">${html}</div>`,
+          iconSize: [CLUSTER_SIZE, CLUSTER_SIZE],
+          iconAnchor: [CLUSTER_SIZE / 2, CLUSTER_SIZE / 2],
+        });
+      },
     });
     map.addLayer(cluster);
     mapRef.current = map;
@@ -237,12 +233,17 @@ export function PickupMap({ providers, points, config }: Props) {
       if (!enabled[point.provider_id]) continue;
       const provider = providerById[point.provider_id];
       if (!provider) continue;
-      const marker = L.marker([point.lat, point.lng], { icon: makeIcon(provider, variant) });
+      const marker = L.marker([point.lat, point.lng], {
+        icon: makeIcon(provider),
+        // custom props read by cluster iconCreateFunction
+        providerId: provider.id,
+        providerColor: provider.color,
+      } as L.MarkerOptions & { providerId: string; providerColor: string });
       marker.bindPopup(buildPopupHtml(point, provider), { maxWidth: 320 });
       markers.push(marker);
     }
     cluster.addLayers(markers);
-  }, [points, enabled, providerById, variant]);
+  }, [points, enabled, providerById]);
 
   return (
     <div className="relative h-screen w-screen">
@@ -269,25 +270,6 @@ export function PickupMap({ providers, points, config }: Props) {
             </li>
           ))}
         </ul>
-      </div>
-
-      {/* Pin style selector */}
-      <div className="absolute left-3 top-3 z-[400] flex items-center gap-1 rounded-xl bg-white/95 p-1 shadow-lg backdrop-blur">
-        {([
-          { id: "holo", label: "Holo" },
-          { id: "neon", label: "Neon" },
-          { id: "glass", label: "Glass" },
-        ] as { id: PinVariant; label: string }[]).map((opt) => (
-          <button
-            key={opt.id}
-            onClick={() => setVariant(opt.id)}
-            className={`rounded-lg px-2.5 py-1 text-xs font-medium transition ${
-              variant === opt.id ? "bg-gray-900 text-white" : "text-gray-600 hover:bg-gray-100"
-            }`}
-          >
-            {opt.label}
-          </button>
-        ))}
       </div>
     </div>
   );

@@ -31,8 +31,15 @@ export type AppConfig = {
   default_zoom: number;
 };
 
+export type HomeAddress = {
+  id: string;
+  name: string;
+  lat: number;
+  lng: number;
+};
+
 export const getMapData = createServerFn({ method: "GET" }).handler(async () => {
-  const [providersRes, pointsRes, configRes] = await Promise.all([
+  const [providersRes, pointsRes, configRes, homesRes] = await Promise.all([
     supabaseAdmin.from("providers").select("id, name, logo_url, color"),
     supabaseAdmin
       .from("latest_pickup_points")
@@ -42,11 +49,17 @@ export const getMapData = createServerFn({ method: "GET" }).handler(async () => 
       .select("center_address, center_lat, center_lng, default_zoom")
       .eq("id", 1)
       .single(),
+    supabaseAdmin
+      .from("home_addresses")
+      .select("id, name, lat, lng")
+      .order("position", { ascending: true })
+      .order("created_at", { ascending: true }),
   ]);
 
   if (providersRes.error) throw new Error(providersRes.error.message);
   if (pointsRes.error) throw new Error(pointsRes.error.message);
   if (configRes.error) throw new Error(configRes.error.message);
+  if (homesRes.error) throw new Error(homesRes.error.message);
 
   const providers = (providersRes.data ?? []) as Provider[];
   const points = ((pointsRes.data ?? []) as unknown as PickupPoint[]).map((p) => ({
@@ -59,6 +72,12 @@ export const getMapData = createServerFn({ method: "GET" }).handler(async () => 
     center_lat: Number(configRes.data.center_lat),
     center_lng: Number(configRes.data.center_lng),
   } as AppConfig;
+  const homes = ((homesRes.data ?? []) as HomeAddress[]).map((h) => ({
+    ...h,
+    lat: Number(h.lat),
+    lng: Number(h.lng),
+  }));
 
-  return { providers, points, config };
+  return { providers, points, config, homes };
 });
+

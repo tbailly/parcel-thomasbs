@@ -115,7 +115,7 @@ function DashboardPage() {
           <nav className="flex gap-2 text-sm">
             <Link to="/" className="text-muted-foreground hover:text-foreground">Carte</Link>
             <span className="text-muted-foreground">·</span>
-            <Link to="/refresh" className="text-muted-foreground hover:text-foreground">Refresh</Link>
+            <Link to="/refresh-mondialrelay" className="text-muted-foreground hover:text-foreground">Refresh MR</Link>
             <span className="text-muted-foreground">·</span>
             <Link to="/refresh-vinted" className="text-muted-foreground hover:text-foreground">Vinted Go</Link>
           </nav>

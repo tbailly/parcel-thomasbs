@@ -237,7 +237,7 @@ export function PickupMap({ providers, points, config }: Props) {
       if (!enabled[point.provider_id]) continue;
       const provider = providerById[point.provider_id];
       if (!provider) continue;
-      const marker = L.marker([point.lat, point.lng], { icon: makeIcon(provider) });
+      const marker = L.marker([point.lat, point.lng], { icon: makeIcon(provider, variant) });
       marker.bindPopup(buildPopupHtml(point, provider), { maxWidth: 320 });
       markers.push(marker);
     }

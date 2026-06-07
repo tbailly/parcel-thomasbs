@@ -338,7 +338,8 @@ function PointSheet({ point, provider, onClose }: { point: PickupPoint | null; p
 
   return (
     <Drawer open={open} onOpenChange={(o) => { if (!o) onClose(); }} shouldScaleBackground={false}>
-      <DrawerContent className="mx-auto max-w-md border-gray-200 bg-white">
+      <DrawerContent className="z-[1001] mx-auto max-w-md border-gray-200 bg-white">
+
         <DrawerTitle className="sr-only">{cleanName}</DrawerTitle>
         <DrawerDescription className="sr-only">Informations sur le point relais</DrawerDescription>
 

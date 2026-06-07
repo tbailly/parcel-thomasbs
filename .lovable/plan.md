@@ -1,40 +1,70 @@
-## Objectif
 
-Restyliser les pins de la carte avec une forme classique de "pin" (rond en haut, pointe en bas où la pointe correspond exactement à la coordonnée géographique), avec le logo du provider à l'intérieur du rond.
+# Plan : récupération Vinted Go (expérimental)
 
-## Étapes
+## Observations sur l'API Vinted Go (depuis les HAR)
 
-### 1. Assets logos providers
+- **Liste des points** : `GET https://vintedgo.com/fr/carrier-locations?region=europe&country=fr&bounds=<urlencoded JSON>&_rsc=<hash>` avec header `RSC: 1` et `Accept: text/x-component`. Réponse `text/x-component` (format RSC Next.js) contenant un payload du type :
+  ```
+  "points":[{"id":10,"point_type":"locker","name":"Franprix","country_code":"FR","address":"...","city":"...","postal_code":"...","lat":..,"lng":..,"active":true,"operational_status":{...}}, ...]
+  ```
+  Pas d'`opening_hours` dans cette liste.
 
-Créer `src/assets/providers/` avec :
-- `mondial-relay.png` — copié depuis l'image uploadée (`/mnt/user-uploads/logo_cropped.png`).
-- `vinted-go.svg`, `chronopost.svg`, `shop2shop.svg` — placeholders SVG simples (cercle coloré avec initiales du provider, type "VG", "CH", "S2S") qu'on pourra remplacer plus tard.
+- **Détail d'un point** : `POST` Server Action (header `Next-Action`, body `["80"]`). Réponse contient `business_hours: [{day:"monday", open:"08:30", close:"21:45"}, ...]`. Server Actions = fragile (hash qui change à chaque déploiement), on évitera pour la v1.
 
-Les fichiers sont petits → on les garde dans le repo (pas de lovable-assets).
+- **Contrainte clé** : `bounds` est une petite bbox (~quelques km²). Il faut **tiler** pour couvrir une zone.
 
-### 2. Mettre à jour `logo_url` des providers
+## Stratégie : appel HTTP direct (pas Firecrawl)
 
-Migration SQL : `UPDATE providers SET logo_url = '/src/...'` n'est pas idéal car Vite gère les imports. Préférer :
-- Garder `logo_url` en DB pour les autres usages éventuels, mais côté `PickupMap` mapper `provider.name` (ou un slug) vers un import local.
-- Créer un petit map `providerLogos: Record<string, string>` dans `PickupMap.tsx` (ou un fichier dédié `src/lib/provider-logos.ts`) qui mappe `provider.name` → URL importée (`import mondialRelayLogo from "@/assets/providers/mondial-relay.png"`).
-- Fallback sur `provider.logo_url` si pas de mapping local.
+L'endpoint liste est public, JSON-parsable via regex, et bien moins coûteux/lent que Firecrawl. On garde Firecrawl en plan B si jamais Vinted bloque (cf. section "Fallback" ci-dessous).
 
-### 3. Nouveau design de pin dans `PickupMap.tsx`
+## Encapsulation expérimentale
 
-Remplacer `makeIcon` (actuellement un cercle centré sur la coordonnée) par un pin en goutte :
+Tout le code Vinted vit dans des fichiers dédiés, indépendants de `mondial-relay.functions.ts` et de la route `/refresh`. Aucune modif du flux existant.
 
-- SVG inline dans le `divIcon` html :
-  - Forme : cercle de 36px en haut + pointe triangulaire de 14px en bas (total ~50px de haut).
-  - Couleur de fond = `provider.color`, bordure blanche 2px, ombre douce.
-  - Logo du provider centré dans la partie circulaire (28×28, `border-radius:50%`, `object-fit:cover`, fond blanc).
-- `iconSize: [36, 50]`, `iconAnchor: [18, 50]` (pointe = bas du SVG = coordonnée exacte), `popupAnchor: [0, -46]`.
+- `src/lib/vinted-go.functions.ts` — server functions Vinted (toutes nouvelles, isolées).
+- `src/routes/refresh-vinted.tsx` — page bac-à-sable dédiée, accessible via `/refresh-vinted`. Pas de lien depuis `/refresh` pour éviter toute interférence.
 
-### 4. Légende
+## v1 — fonctionnement
 
-Garder le rendu actuel de la légende (petit rond avec logo) — pas besoin de changer.
+### 1. `scrapeVintedGoDebug` (server fn, POST)
+Lance un scrape sur **une seule bbox** (Paris centre, ~0.04° × 0.06°, codée en dur dans la fn pour cette première tentative). Objectifs :
 
-## Hors scope
+1. Créer une ligne dans `queries` (provider_id `vinted_go`, status `running`).
+2. Fetcher l'URL RSC avec :
+   - headers : `RSC: 1`, `Accept: text/x-component`, `User-Agent` Firefox réaliste, `Accept-Language: fr`.
+   - Essayer **sans** `_rsc=` d'abord (souvent optionnel). Si HTTP non-200, retry avec `_rsc=1`.
+3. Parser le body texte : trouver `"points":[` puis extraire jusqu'au `]` correspondant via un petit compteur de crochets, puis `JSON.parse`.
+4. Mapper vers le schéma `pickup_points` : `external_id = "vg-${id}"`, `name`, `address`, `postal_code`, `city`, `lat`, `lng`, `opening_hours = {}` (vide pour la v1), `notes = operational_status.status` si != "Normal".
+5. Insérer en base avec `query_id` et `provider_id = "vinted_go"`.
+6. Mettre à jour `queries` (status, raw_count, inserted_count, error = body si parsing échoue, en tronquant).
+7. Retourner `{ queryId, httpStatus, rawCount, insertedCount, sample: first 3, error }` pour debug live dans l'UI.
 
-- Pas de changement DB.
-- Pas de modification de la logique de fetch ou des popups (contenu inchangé).
-- Pas de touch à `/refresh`.
+### 2. UI bac-à-sable `/refresh-vinted`
+Une seule grosse carte avec :
+- Description courte de la stratégie.
+- Bouton "Lancer scrape Paris centre (bbox unique)" → appelle `scrapeVintedGoDebug`.
+- Affichage brut du résultat (JSON) sous le bouton.
+
+## Préreq DB
+
+Vérifier qu'une ligne `providers` avec `id = 'vinted_go'` existe. Si non, migration courte pour l'insérer (nom, couleur placeholder, logo `vinted-go.svg` déjà présent dans `src/assets/providers/`). Je vérifierai au début de la phase build et n'ajouterai la migration que si nécessaire.
+
+## Fallback (hors scope v1, juste noté)
+
+Si Vinted répond 403/anti-bot sur l'endpoint RSC :
+- Plan B : Firecrawl scrape de la même URL `carrier-locations?...&bounds=...` en demandant `formats: ['rawHtml']`, puis re-parse identique.
+- Plan C : Firecrawl avec `formats: [{type:'json', prompt:'...'}]`.
+
+On n'écrit rien de tout ça en v1.
+
+## Hors scope v1 explicitement
+
+- Pas de tiling multi-bbox (on testera après que la bbox unique marche).
+- Pas de récupération des `business_hours` (le détail nécessite Server Action — on s'en occupera en v2 seulement si la v1 fonctionne).
+- Aucune modification de `/refresh`, `mondial-relay.functions.ts`, `PickupMap.tsx`, ni du schéma DB sauf insertion du provider si manquant.
+
+## Fichiers touchés
+
+- créer `src/lib/vinted-go.functions.ts`
+- créer `src/routes/refresh-vinted.tsx`
+- (peut-être) une migration courte pour insérer le provider `vinted_go`

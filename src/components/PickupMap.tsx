@@ -454,22 +454,3 @@ function PointSheet({ point, provider, onClose }: { point: PickupPoint | null; p
     </>
   );
 }
-
-function GoogleMapsIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden>
-      <path d="M12 2C7.6 2 4 5.6 4 10c0 5.6 8 12 8 12s8-6.4 8-12c0-4.4-3.6-8-8-8z" fill="#EA4335" />
-      <circle cx="12" cy="10" r="3" fill="#fff" />
-    </svg>
-  );
-}
-
-function CitymapperIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden>
-      <rect x="2" y="2" width="20" height="20" rx="5" fill="#0099D5" />
-      <path d="M7 12c0-2.8 2.2-5 5-5 1.7 0 3.2.8 4.1 2.1l-1.7 1.2A3 3 0 0 0 9 12a3 3 0 0 0 5.4 1.7l1.7 1.2A5 5 0 0 1 7 12z" fill="#fff" />
-      <circle cx="16.5" cy="7.5" r="1.5" fill="#FFD400" />
-    </svg>
-  );
-}

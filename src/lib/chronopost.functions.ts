@@ -217,6 +217,8 @@ export const refreshChronopost = createServerFn({ method: "POST" })
 
     const dedup = new Map<string, RawPoint>();
     const reports: string[] = [];
+    const skipped = { closed: 0, noHours: 0, badType: 0, badCoords: 0, dateClosed: 0 };
+    let sampleKeys: string[] | null = null;
     for (let i = 0; i < homes.length; i++) {
       if (i > 0) await jitter(1000, 3000);
       const h = homes[i];
@@ -228,6 +230,9 @@ export const refreshChronopost = createServerFn({ method: "POST" })
       reports.push(
         `${h.postal_code}(${h.name}): http=${status} raw=${points.length}${error ? ` err=${error.slice(0, 80)}` : ""}`,
       );
+      if (!sampleKeys && points.length > 0) {
+        sampleKeys = Object.keys(points[0]).sort();
+      }
       for (const p of points) {
         const id = (p.identifier ?? "").trim();
         if (!id) continue;
@@ -235,12 +240,56 @@ export const refreshChronopost = createServerFn({ method: "POST" })
       }
     }
 
+    // Helpers de filtrage
+    const today = new Date();
+    const todayStr = today.toISOString().slice(0, 10).replace(/-/g, "");
+    const isClosedToday = (periods?: { dayStart?: string; dayEnd?: string }[]) => {
+      if (!periods || periods.length === 0) return false;
+      return periods.some((p) => {
+        const s = (p.dayStart ?? "").replace(/-/g, "").slice(0, 8);
+        const e = (p.dayEnd ?? "").replace(/-/g, "").slice(0, 8);
+        if (!s && !e) return false;
+        if (s && todayStr < s) return false;
+        if (e && todayStr > e) return false;
+        return true;
+      });
+    };
+
     const mapped = Array.from(dedup.values())
       .map((p) => {
+        // 1. Coordonnées
         const lat = typeof p.latitude === "string" ? Number(p.latitude) : (p.latitude ?? NaN);
         const lng = typeof p.longitude === "string" ? Number(p.longitude) : (p.longitude ?? NaN);
-        if (!Number.isFinite(lat) || !Number.isFinite(lng) || (lat === 0 && lng === 0)) return null;
-        const typeLabel = TYPE_LABEL[p.type ?? ""] ?? `Type ${p.type ?? "?"}`;
+        if (!Number.isFinite(lat) || !Number.isFinite(lng) || (lat === 0 && lng === 0)) {
+          skipped.badCoords++;
+          return null;
+        }
+        // 2. Flags d'inactivité explicites
+        if (p.enabled === false || p.disabled === true || p.active === false || p.inService === false) {
+          skipped.closed++;
+          return null;
+        }
+        // 3. Type connu uniquement (P=consigne/relais, B=bureau de poste, A=agence)
+        const type = (p.type ?? "").toUpperCase();
+        if (!TYPE_LABEL[type]) {
+          skipped.badType++;
+          return null;
+        }
+        // 4. Horaires : au moins un jour ouvert dans la semaine
+        const opening = parseOpeningHours(p.listopeninghours);
+        if (Object.keys(opening).length === 0) {
+          skipped.noHours++;
+          return null;
+        }
+        // 5. Fermeture exceptionnelle couvrant aujourd'hui (vacances, travaux)
+        if (
+          isClosedToday(p.holidaysList) ||
+          isClosedToday(p.closingPeriodList) ||
+          isClosedToday(p.listclosing)
+        ) {
+          skipped.dateClosed++;
+          return null;
+        }
         return {
           provider_id: PROVIDER_ID,
           external_id: `cp-${p.identifier}`,

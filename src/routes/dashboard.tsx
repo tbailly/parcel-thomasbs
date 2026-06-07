@@ -324,4 +324,4 @@ function QueryPointsList({ queryId }: { queryId: string }) {
   );
 }
 
-type _Q = ProviderQuery; // keep type imported
+type _Q = ProviderQuery;

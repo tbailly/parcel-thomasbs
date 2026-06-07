@@ -1,51 +1,77 @@
-## Diagnostic
+## Découverte
 
-1. **Cron OK côté schedule** : `enrich-vinted-go` tourne toutes les 2 min (vu dans `cron.job_run_details`).
-2. **URL OK depuis publication** : plus de 404 "No published build".
-3. **Mais timeout pg_net à 5 s** : `net._http_response` montre `Timeout of 5000 ms reached`. Un batch de 5 points fait 4 attentes de 2-5 s entre les fetchs (`jitter(2000, 5000)`) → 8-20 s, bien au-delà des 5 s par défaut.
+En inspectant la page `ounoustrouver.html` dans le navigateur, j'ai capturé un endpoint **JSON public, non authentifié** qu'utilise le front Chronopost :
 
-Conséquence : le handler côté app *commence* le batch mais pg_net coupe la connexion. Cloudflare peut interrompre la suite du traitement quand le client ferme — d'où aucun `enrichment_jobs` créé par la cron.
-
-## Correctifs
-
-### 1. Rescheduler la cron avec `timeout_milliseconds`
-
-Unscheduler puis recréer avec un timeout généreux (60 s) — la cron n'attend de toute façon pas la réponse pour passer à autre chose. Via `supabase--insert` (pas une migration : touche `cron.job`, contient l'URL/anon key).
-
-```sql
-SELECT cron.unschedule('enrich-vinted-go');
-SELECT cron.schedule(
-  'enrich-vinted-go',
-  '*/2 * * * *',
-  $$SELECT net.http_post(
-      url := 'https://project--a6e6dce0-50f1-4e53-949b-4dc21b6d4ad7.lovable.app/api/public/hooks/enrich-vinted-go',
-      headers := '{"Content-Type":"application/json","apikey":"sb_publishable_2SFPKfHm4P0ch_2dHLKIcA_Fa9T_Nqc"}'::jsonb,
-      body := '{"batchSize":5}'::jsonb,
-      timeout_milliseconds := 60000
-  );$$
-);
+```
+GET https://www.chronopost.fr/expeditionAvancee/stubpointsearch.json
+    ?lat={lat}&lon={lng}&z={zip}&c={CITY}&a=&p=FR&lang=null&_={ts}
 ```
 
-### 2. Scoper l'enrichissement à la dernière query éligible
+Testé en curl depuis la sandbox avec un UA Firefox + `Referer` : **HTTP 200, ~83 KB**. Réponse :
 
-Dans `src/lib/vinted-go.functions.ts`, en haut de `enrichVintedGoBatchImpl` :
+- `olgiPointList[]` : **30 points** max, triés par distance (rayon ~9 km autour du `lat/lon`).
+- Chaque point contient : `identifier` (code unique ex `7747X`), `name`, `address`, `zipcode`, `city`, `latitude`, `longitude`, `type` (`P` = consigne/relais, `B` = bureau de poste, `A` = agence), `distanceInMeters`, et **`listopeninghours`** (tableau `{day: 1..7, openinghours: "08:00-12:00 12:00-22:00"}` — 1=Lundi … 7=Dimanche).
 
-1. Lire la dernière `queries` pour `provider_id='vinted_go'` où `status='success'` ET `inserted_count > 1`, triée par `finished_at desc`.
-2. Si aucune → finaliser le job en `success` avec `processed=0, remaining_after=0` et `error='no eligible query'`, retourner.
-3. Sinon, ajouter `.eq('query_id', latestQuery.id)` au `select` qui pioche les `pickup_points` à enrichir.
-4. Recalculer `remaining_after` avec le même `eq('query_id', latestQuery.id)`.
+**→ Pas d'étape d'enrichissement nécessaire** (contrairement à Vinted Go) : la liste contient déjà les horaires.
 
-### 3. Aligner `getVintedGoStats`
+J'ai aussi vu le WSDL SOAP officiel `recherchebt-ws-cxf/PointRelaisServiceWS` — il exige un `accountNumber`/`password` Chronopost (testé : `errorCode=1500 invalid account`). On reste donc sur l'endpoint JSON public.
 
-Pour que la barre de progression reflète ce que la cron traite vraiment, scoper `total`, `enriched`, `pending` à la même dernière query éligible. Si aucune : `total=0, enriched=0, pending=0, inProgress=false`.
+## Stratégie de couverture
 
-### Hors scope
+- 1 fetch = 30 points autour d'un `(lat, lng)`, rayon ~9 km.
+- On a la table `home_addresses` avec `lat/lng/postal_code`.
+- 1 requête par adresse maison, jitter 1-3 s entre les appels (poli + évite le rate-limit Cloudflare).
+- Dédup par `identifier` (devient `external_id = cp-{identifier}`).
+- Upsert sur `(provider_id, external_id)` exactement comme Vinted Go → relance idempotente.
 
-- Pas de modif du dashboard ni des autres providers.
-- Pas de refactor de la logique de jitter / batch size.
-- Pas de migration SQL (uniquement `cron.job` via insert).
+Pour le premier test, on fetch toutes les adresses maison existantes et on observe le total après dédup. Si on veut élargir plus tard (ex. couvrir un département complet), on pourra générer des points de grille type Vinted Go, mais ce n'est pas nécessaire pour démarrer.
 
-### Fichiers touchés
+## Fichiers à créer
 
-- `cron.job` (unschedule + reschedule avec timeout)
-- `src/lib/vinted-go.functions.ts` (scope query + stats)
+### 1. `src/lib/chronopost.functions.ts`
+
+Server functions :
+
+- `refreshChronopost()` — `createServerFn` POST :
+  1. Crée une ligne `queries` (`provider_id='chronopost'`, `status='running'`).
+  2. Lit `home_addresses` (lat/lng/postal_code/name) — early-exit en `error` si vide.
+  3. Pour chaque home : `fetch(stubpointsearch.json?...)` avec UA Firefox + Referer + `X-Requested-With: XMLHttpRequest`. Jitter 1-3 s entre.
+  4. Parse `olgiPointList`, filtre les points sans `latitude/longitude` valides, dédup par `identifier`.
+  5. Mappe en `pickup_points` : `external_id = "cp-"+identifier`, `opening_hours` = conversion `listopeninghours` → `{mon:[{open,close},…], …}` (split sur espace pour les multi-créneaux, ignore les `null`/`fermé`), `notes` = `"Type: P|B|A"` (libellé humain).
+  6. **Upsert** `onConflict: 'provider_id,external_id'`.
+  7. Met à jour la ligne `queries` (`raw_count`, `inserted_count`, status, `finished_at`, `error` = mini-rapport par adresse `"75009: raw=30"` joint en `||`).
+
+- `getChronopostStats()` — `createServerFn` GET : retourne la dernière query Chronopost (date, raw_count, inserted_count, status, error) + le count total de points actuellement en DB.
+
+### 2. `src/routes/refresh-chronopost.tsx`
+
+Page minimaliste (pattern Vinted Go simplifié — pas d'enrichissement, pas de progress bar) :
+
+- Header + description courte ("Une requête par adresse maison, ~30 points par requête, horaires incluses").
+- Bouton "Rafraîchir Chronopost" (couleur `#00925A` du logo). Disabled pendant le run.
+- Carte stats : dernier run (status badge, raw_count, inserted_count, durée, erreurs si présentes).
+- Liste des 10 dernières `queries` Chronopost en table.
+
+### 3. Routing
+
+`src/routeTree.gen.ts` est auto-régénéré par le plugin Vite — pas à toucher.
+
+## Hors scope pour ce premier test
+
+- Pas de cron automatique : on déclenche à la main pour valider d'abord.
+- Pas de grille géographique pour couvrir des zones plus larges que les home_addresses.
+- Pas de filtre par type (on garde P + B + A pour l'instant — on verra à l'usage si on veut restreindre).
+- Pas d'enrichissement séparé (inutile).
+- Pas de modif du provider row `chronopost` en DB (déjà présent).
+
+## Comment tester ensemble
+
+1. J'implémente.
+2. Tu vas sur `/refresh-chronopost`, clic sur le bouton.
+3. On regarde le résultat (raw_count, inserted_count, sample en notes).
+4. On vérifie sur la carte principale `/` que les points Chronopost apparaissent avec leurs horaires lisibles dans le popup.
+
+## Questions avant d'implémenter
+
+- **Filtrage des types** : on garde P (consigne/relais) **et** B (bureau de poste) **et** A (agence Chronopost), ou tu veux qu'on filtre dès maintenant à P uniquement ?
+- **Cron** : on attend que le test manuel soit OK avant d'ajouter un cron (recommandé), ou tu veux que je le planifie aussi tout de suite (ex. tous les 7 jours) ?

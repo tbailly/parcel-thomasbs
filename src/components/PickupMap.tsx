@@ -245,7 +245,7 @@ export function PickupMap({ providers, points, config, homes }: Props) {
       clusterRef.current = null;
       homesLayerRef.current = null;
     };
-  }, [config.center_lat, config.center_lng, config.default_zoom]);
+  }, [config.center_lat, config.center_lng, config.default_zoom, homes]);
 
   // Sync home pins
   useEffect(() => {

@@ -13,6 +13,7 @@ import { Route as RefreshVintedRouteImport } from './routes/refresh-vinted'
 import { Route as RefreshRouteImport } from './routes/refresh'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApiPublicRefreshPudosRouteImport } from './routes/api/public/refresh-pudos'
+import { Route as ApiPublicHooksEnrichVintedGoRouteImport } from './routes/api/public/hooks/enrich-vinted-go'
 
 const RefreshVintedRoute = RefreshVintedRouteImport.update({
   id: '/refresh-vinted',
@@ -34,18 +35,26 @@ const ApiPublicRefreshPudosRoute = ApiPublicRefreshPudosRouteImport.update({
   path: '/api/public/refresh-pudos',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicHooksEnrichVintedGoRoute =
+  ApiPublicHooksEnrichVintedGoRouteImport.update({
+    id: '/api/public/hooks/enrich-vinted-go',
+    path: '/api/public/hooks/enrich-vinted-go',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/refresh': typeof RefreshRoute
   '/refresh-vinted': typeof RefreshVintedRoute
   '/api/public/refresh-pudos': typeof ApiPublicRefreshPudosRoute
+  '/api/public/hooks/enrich-vinted-go': typeof ApiPublicHooksEnrichVintedGoRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/refresh': typeof RefreshRoute
   '/refresh-vinted': typeof RefreshVintedRoute
   '/api/public/refresh-pudos': typeof ApiPublicRefreshPudosRoute
+  '/api/public/hooks/enrich-vinted-go': typeof ApiPublicHooksEnrichVintedGoRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -53,18 +62,30 @@ export interface FileRoutesById {
   '/refresh': typeof RefreshRoute
   '/refresh-vinted': typeof RefreshVintedRoute
   '/api/public/refresh-pudos': typeof ApiPublicRefreshPudosRoute
+  '/api/public/hooks/enrich-vinted-go': typeof ApiPublicHooksEnrichVintedGoRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/refresh' | '/refresh-vinted' | '/api/public/refresh-pudos'
+  fullPaths:
+    | '/'
+    | '/refresh'
+    | '/refresh-vinted'
+    | '/api/public/refresh-pudos'
+    | '/api/public/hooks/enrich-vinted-go'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/refresh' | '/refresh-vinted' | '/api/public/refresh-pudos'
+  to:
+    | '/'
+    | '/refresh'
+    | '/refresh-vinted'
+    | '/api/public/refresh-pudos'
+    | '/api/public/hooks/enrich-vinted-go'
   id:
     | '__root__'
     | '/'
     | '/refresh'
     | '/refresh-vinted'
     | '/api/public/refresh-pudos'
+    | '/api/public/hooks/enrich-vinted-go'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -72,6 +93,7 @@ export interface RootRouteChildren {
   RefreshRoute: typeof RefreshRoute
   RefreshVintedRoute: typeof RefreshVintedRoute
   ApiPublicRefreshPudosRoute: typeof ApiPublicRefreshPudosRoute
+  ApiPublicHooksEnrichVintedGoRoute: typeof ApiPublicHooksEnrichVintedGoRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -104,6 +126,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicRefreshPudosRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/hooks/enrich-vinted-go': {
+      id: '/api/public/hooks/enrich-vinted-go'
+      path: '/api/public/hooks/enrich-vinted-go'
+      fullPath: '/api/public/hooks/enrich-vinted-go'
+      preLoaderRoute: typeof ApiPublicHooksEnrichVintedGoRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
@@ -112,6 +141,7 @@ const rootRouteChildren: RootRouteChildren = {
   RefreshRoute: RefreshRoute,
   RefreshVintedRoute: RefreshVintedRoute,
   ApiPublicRefreshPudosRoute: ApiPublicRefreshPudosRoute,
+  ApiPublicHooksEnrichVintedGoRoute: ApiPublicHooksEnrichVintedGoRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

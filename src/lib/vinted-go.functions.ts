@@ -453,7 +453,7 @@ export const getVintedGoEnrichmentJobs = createServerFn({ method: "GET" }).handl
 });
 
 export const getVintedGoStats = createServerFn({ method: "GET" }).handler(async () => {
-  const [totalRes, enrichedRes, lastOkRes, lastErrRes] = await Promise.all([
+  const [totalRes, enrichedRes, lastOkRes, lastErrRes, runningRes] = await Promise.all([
     supabaseAdmin
       .from("pickup_points")
       .select("id", { count: "exact", head: true })
@@ -479,12 +479,21 @@ export const getVintedGoStats = createServerFn({ method: "GET" }).handler(async 
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle(),
+    supabaseAdmin
+      .from("enrichment_jobs")
+      .select("id", { count: "exact", head: true })
+      .eq("provider_id", PROVIDER_ID)
+      .eq("status", "running"),
   ]);
 
+  const total = totalRes.count ?? 0;
+  const enriched = enrichedRes.count ?? 0;
+  const pending = total - enriched;
   return {
-    total: totalRes.count ?? 0,
-    enriched: enrichedRes.count ?? 0,
-    pending: (totalRes.count ?? 0) - (enrichedRes.count ?? 0),
+    total,
+    enriched,
+    pending,
+    inProgress: (runningRes.count ?? 0) > 0 || pending > 0,
     lastOk: lastOkRes.data,
     lastError: lastErrRes.data,
   };

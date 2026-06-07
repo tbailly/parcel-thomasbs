@@ -172,6 +172,13 @@ export function PickupMap({ providers, points, config }: Props) {
   const [enabled, setEnabled] = useState<Record<string, boolean>>(
     () => Object.fromEntries(providers.map((p) => [p.id, true])),
   );
+  const [variant, setVariant] = useState<PinVariant>(() => {
+    if (typeof window === "undefined") return "holo";
+    return (localStorage.getItem("pin-variant") as PinVariant) || "holo";
+  });
+  useEffect(() => {
+    if (typeof window !== "undefined") localStorage.setItem("pin-variant", variant);
+  }, [variant]);
 
   const providerById = useMemo(
     () => Object.fromEntries(providers.map((p) => [p.id, p])),

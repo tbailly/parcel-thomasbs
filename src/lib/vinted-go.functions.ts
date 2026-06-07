@@ -322,10 +322,40 @@ export async function enrichVintedGoBatchImpl(
   };
 
   try {
+    // Scope: only enrich points belonging to the latest successful Vinted query
+    // that added more than one point.
+    const { data: latestQuery, error: lqErr } = await supabaseAdmin
+      .from("queries")
+      .select("id")
+      .eq("provider_id", PROVIDER_ID)
+      .eq("status", "success")
+      .gt("inserted_count", 1)
+      .order("finished_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+
+    if (lqErr) {
+      await finalize({ status: "error", error: `latest query: ${lqErr.message}` });
+      return { jobId, processed: 0, succeeded: 0, failed: 0, remaining: 0, samples: [] };
+    }
+    if (!latestQuery) {
+      await finalize({
+        status: "success",
+        processed: 0,
+        succeeded: 0,
+        failed: 0,
+        remaining_after: 0,
+        error: "no eligible query",
+      });
+      return { jobId, processed: 0, succeeded: 0, failed: 0, remaining: 0, samples: [] };
+    }
+    const scopedQueryId = latestQuery.id as string;
+
     const { data: rows, error: selErr } = await supabaseAdmin
       .from("pickup_points")
       .select("id, external_id")
       .eq("provider_id", PROVIDER_ID)
+      .eq("query_id", scopedQueryId)
       .is("hours_fetched_at", null)
       .order("updated_at", { ascending: true })
       .limit(batchSize);
@@ -341,6 +371,7 @@ export async function enrichVintedGoBatchImpl(
         samples: [{ external_id: "-", status: "select-error", error: selErr.message }],
       };
     }
+
 
     const points = rows ?? [];
     let succeeded = 0;
@@ -410,7 +441,9 @@ export async function enrichVintedGoBatchImpl(
       .from("pickup_points")
       .select("id", { count: "exact", head: true })
       .eq("provider_id", PROVIDER_ID)
+      .eq("query_id", scopedQueryId)
       .is("hours_fetched_at", null);
+
 
     await finalize({
       status: "success",
@@ -453,15 +486,39 @@ export const getVintedGoEnrichmentJobs = createServerFn({ method: "GET" }).handl
 });
 
 export const getVintedGoStats = createServerFn({ method: "GET" }).handler(async () => {
+  const { data: latestQuery } = await supabaseAdmin
+    .from("queries")
+    .select("id")
+    .eq("provider_id", PROVIDER_ID)
+    .eq("status", "success")
+    .gt("inserted_count", 1)
+    .order("finished_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (!latestQuery) {
+    return {
+      total: 0,
+      enriched: 0,
+      pending: 0,
+      inProgress: false,
+      lastOk: null,
+      lastError: null,
+    };
+  }
+  const scopedQueryId = latestQuery.id as string;
+
   const [totalRes, enrichedRes, lastOkRes, lastErrRes, runningRes] = await Promise.all([
     supabaseAdmin
       .from("pickup_points")
       .select("id", { count: "exact", head: true })
-      .eq("provider_id", PROVIDER_ID),
+      .eq("provider_id", PROVIDER_ID)
+      .eq("query_id", scopedQueryId),
     supabaseAdmin
       .from("pickup_points")
       .select("id", { count: "exact", head: true })
       .eq("provider_id", PROVIDER_ID)
+      .eq("query_id", scopedQueryId)
       .not("hours_fetched_at", "is", null),
     supabaseAdmin
       .from("enrichments")
@@ -498,3 +555,4 @@ export const getVintedGoStats = createServerFn({ method: "GET" }).handler(async 
     lastError: lastErrRes.data,
   };
 });
+

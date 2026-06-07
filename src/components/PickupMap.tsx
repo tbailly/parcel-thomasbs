@@ -33,35 +33,7 @@ function formatHours(hours: OpeningHours[keyof OpeningHours]): string {
   return hours.map((s) => `${s.open} – ${s.close}`).join(", ");
 }
 
-function buildPopupHtml(point: PickupPoint, provider: Provider): string {
-  const todayKey = DAY_KEYS[new Date().getDay()];
-  const isFake = point.name.startsWith("Fake - ");
-  const logo = getProviderLogo(provider);
-  const rows = DAYS.map(({ key, label }) => {
-    const isToday = key === todayKey;
-    return `<tr${isToday ? ' style="font-weight:600;color:' + provider.color + '"' : ""}>
-      <td style="padding:2px 8px 2px 0;white-space:nowrap">${label}${isToday ? " (auj.)" : ""}</td>
-      <td style="padding:2px 0">${formatHours(point.opening_hours[key])}</td>
-    </tr>`;
-  }).join("");
-
-  return `
-    <div style="font-family:inherit;min-width:220px;max-width:280px">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-        <img src="${logo}" width="22" height="22" alt="" style="border-radius:50%;object-fit:cover"/>
-        <strong style="font-size:13px">${provider.name}</strong>
-        ${isFake ? '<span style="margin-left:auto;font-size:10px;background:#fde68a;color:#92400e;padding:2px 6px;border-radius:4px">DEMO</span>' : ""}
-      </div>
-      <div style="font-size:14px;font-weight:600;margin-bottom:2px">${point.name.replace(/^Fake - /, "")}</div>
-      <div style="font-size:12px;color:#555;margin-bottom:8px">${point.address}<br/>${point.postal_code} ${point.city}</div>
-      <details>
-        <summary style="cursor:pointer;font-size:12px;color:#333;margin-bottom:4px">Horaires</summary>
-        <table style="font-size:12px;border-collapse:collapse;margin-top:4px">${rows}</table>
-      </details>
-      ${point.notes ? `<div style="margin-top:8px;padding:6px 8px;background:#f3f4f6;border-radius:6px;font-size:12px;color:#374151">${point.notes}</div>` : ""}
-    </div>
-  `;
-}
+// Popup rendering moved to a React bottom sheet (see component below).
 
 const PIN_SIZE = 48;
 const CLUSTER_SIZE = 56;

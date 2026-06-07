@@ -271,6 +271,24 @@ export function PickupMap({ providers, points, config }: Props) {
         </ul>
       </div>
 
+      {/* Pin style selector */}
+      <div className="absolute left-3 top-3 z-[400] flex items-center gap-1 rounded-xl bg-white/95 p-1 shadow-lg backdrop-blur">
+        {([
+          { id: "holo", label: "Holo" },
+          { id: "neon", label: "Neon" },
+          { id: "glass", label: "Glass" },
+        ] as { id: PinVariant; label: string }[]).map((opt) => (
+          <button
+            key={opt.id}
+            onClick={() => setVariant(opt.id)}
+            className={`rounded-lg px-2.5 py-1 text-xs font-medium transition ${
+              variant === opt.id ? "bg-gray-900 text-white" : "text-gray-600 hover:bg-gray-100"
+            }`}
+          >
+            {opt.label}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

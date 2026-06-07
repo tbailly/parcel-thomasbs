@@ -133,7 +133,10 @@ export function issueSessionCookie(): void {
   setCookie(COOKIE_NAME, signSession(expiresAt), {
     httpOnly: true,
     secure: true,
-    sameSite: "lax",
+    // "none" est nécessaire pour que le cookie soit accepté quand l'app
+    // tourne dans une iframe cross-site (preview Lovable). Sans ça, le
+    // navigateur drop le cookie et l'utilisateur reste bloqué sur le login.
+    sameSite: "none",
     path: "/",
     maxAge: MAX_AGE_SECONDS,
   });

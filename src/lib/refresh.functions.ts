@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { requireAdmin } from "./admin-auth.functions";
 
 export const getRefreshProviders = createServerFn({ method: "GET" }).handler(
   async () => {
@@ -43,6 +44,7 @@ const ImportSchema = z.object({
 });
 
 export const importPickupPointsJson = createServerFn({ method: "POST" })
+  .middleware([requireAdmin])
   .inputValidator((input) => ImportSchema.parse(input))
   .handler(async ({ data }) => {
     const now = new Date().toISOString();

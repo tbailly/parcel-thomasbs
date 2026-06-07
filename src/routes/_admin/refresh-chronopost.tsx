@@ -22,7 +22,7 @@ const statsQueryOptions = queryOptions({
   refetchInterval: 5000,
 });
 
-export const Route = createFileRoute("/refresh-chronopost")({
+export const Route = createFileRoute("/_admin/refresh-chronopost")({
   head: () => ({
     meta: [
       { title: "Refresh Chronopost" },

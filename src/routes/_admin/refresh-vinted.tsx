@@ -34,7 +34,7 @@ const jobsQueryOptions = queryOptions({
   refetchInterval: 5000,
 });
 
-export const Route = createFileRoute("/refresh-vinted")({
+export const Route = createFileRoute("/_admin/refresh-vinted")({
   head: () => ({
     meta: [
       { title: "Refresh Vinted Go" },

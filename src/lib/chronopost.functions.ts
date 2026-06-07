@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import type { OpeningHours, OpeningSlot } from "@/lib/pickup-points.functions";
+import { requireAdmin } from "./admin-auth.functions";
 
 const PROVIDER_ID = "chronopost";
 
@@ -181,6 +182,7 @@ async function fetchOnePoint(lat: number, lng: number, zipcode: string): Promise
 }
 
 export const refreshChronopost = createServerFn({ method: "POST" })
+  .middleware([requireAdmin])
   .inputValidator((input) => z.object({}).parse(input ?? {}))
   .handler(async () => {
     const startedAt = new Date().toISOString();

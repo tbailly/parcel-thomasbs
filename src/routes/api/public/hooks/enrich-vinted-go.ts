@@ -5,9 +5,10 @@ export const Route = createFileRoute("/api/public/hooks/enrich-vinted-go")({
   server: {
     handlers: {
       POST: async ({ request }) => {
-        const expected = process.env.SUPABASE_PUBLISHABLE_KEY ?? process.env.SUPABASE_ANON_KEY;
-        const apikey = request.headers.get("apikey") ?? request.headers.get("Apikey");
-        if (!expected || apikey !== expected) {
+        const expected = process.env.CRON_SECRET;
+        const auth = request.headers.get("authorization") ?? "";
+        const provided = auth.startsWith("Bearer ") ? auth.slice(7) : "";
+        if (!expected || provided.length !== expected.length || provided !== expected) {
           return new Response(JSON.stringify({ error: "unauthorized" }), {
             status: 401,
             headers: { "Content-Type": "application/json" },

@@ -1,6 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
+import { requireAdmin } from "./admin-auth.functions";
 
 export type ProviderOverview = {
   id: string;
@@ -159,6 +160,7 @@ export const getQueryPoints = createServerFn({ method: "GET" })
   });
 
 export const deleteQuery = createServerFn({ method: "POST" })
+  .middleware([requireAdmin])
   .inputValidator((i) => z.object({ query_id: z.string().uuid() }).parse(i))
   .handler(async ({ data }) => {
     const { error } = await supabaseAdmin.from("queries").delete().eq("id", data.query_id);
@@ -166,7 +168,9 @@ export const deleteQuery = createServerFn({ method: "POST" })
     return { ok: true };
   });
 
-export const cleanupOrphans = createServerFn({ method: "POST" }).handler(async () => {
+export const cleanupOrphans = createServerFn({ method: "POST" })
+  .middleware([requireAdmin])
+  .handler(async () => {
   // Points sans query (la cascade FK couvre déjà les query_id pointant dans le vide)
   const { data: orphanPoints, error: e1 } = await supabaseAdmin
     .from("pickup_points")

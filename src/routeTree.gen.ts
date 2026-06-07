@@ -9,38 +9,50 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
-import { Route as RefreshVintedRouteImport } from './routes/refresh-vinted'
-import { Route as RefreshMondialrelayRouteImport } from './routes/refresh-mondialrelay'
-import { Route as RefreshChronopostRouteImport } from './routes/refresh-chronopost'
-import { Route as DashboardRouteImport } from './routes/dashboard'
+import { Route as AdminRouteRouteImport } from './routes/_admin/route'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AdminLoginRouteImport } from './routes/admin.login'
+import { Route as AdminRefreshVintedRouteImport } from './routes/_admin/refresh-vinted'
+import { Route as AdminRefreshMondialrelayRouteImport } from './routes/_admin/refresh-mondialrelay'
+import { Route as AdminRefreshChronopostRouteImport } from './routes/_admin/refresh-chronopost'
+import { Route as AdminDashboardRouteImport } from './routes/_admin/dashboard'
 import { Route as ApiPublicRefreshPudosRouteImport } from './routes/api/public/refresh-pudos'
 import { Route as ApiPublicHooksEnrichVintedGoRouteImport } from './routes/api/public/hooks/enrich-vinted-go'
 
-const RefreshVintedRoute = RefreshVintedRouteImport.update({
-  id: '/refresh-vinted',
-  path: '/refresh-vinted',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const RefreshMondialrelayRoute = RefreshMondialrelayRouteImport.update({
-  id: '/refresh-mondialrelay',
-  path: '/refresh-mondialrelay',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const RefreshChronopostRoute = RefreshChronopostRouteImport.update({
-  id: '/refresh-chronopost',
-  path: '/refresh-chronopost',
-  getParentRoute: () => rootRouteImport,
-} as any)
-const DashboardRoute = DashboardRouteImport.update({
-  id: '/dashboard',
-  path: '/dashboard',
+const AdminRouteRoute = AdminRouteRouteImport.update({
+  id: '/_admin',
   getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => rootRouteImport,
+} as any)
+const AdminLoginRoute = AdminLoginRouteImport.update({
+  id: '/admin/login',
+  path: '/admin/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AdminRefreshVintedRoute = AdminRefreshVintedRouteImport.update({
+  id: '/refresh-vinted',
+  path: '/refresh-vinted',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminRefreshMondialrelayRoute =
+  AdminRefreshMondialrelayRouteImport.update({
+    id: '/refresh-mondialrelay',
+    path: '/refresh-mondialrelay',
+    getParentRoute: () => AdminRouteRoute,
+  } as any)
+const AdminRefreshChronopostRoute = AdminRefreshChronopostRouteImport.update({
+  id: '/refresh-chronopost',
+  path: '/refresh-chronopost',
+  getParentRoute: () => AdminRouteRoute,
+} as any)
+const AdminDashboardRoute = AdminDashboardRouteImport.update({
+  id: '/dashboard',
+  path: '/dashboard',
+  getParentRoute: () => AdminRouteRoute,
 } as any)
 const ApiPublicRefreshPudosRoute = ApiPublicRefreshPudosRouteImport.update({
   id: '/api/public/refresh-pudos',
@@ -56,29 +68,33 @@ const ApiPublicHooksEnrichVintedGoRoute =
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
-  '/dashboard': typeof DashboardRoute
-  '/refresh-chronopost': typeof RefreshChronopostRoute
-  '/refresh-mondialrelay': typeof RefreshMondialrelayRoute
-  '/refresh-vinted': typeof RefreshVintedRoute
+  '/dashboard': typeof AdminDashboardRoute
+  '/refresh-chronopost': typeof AdminRefreshChronopostRoute
+  '/refresh-mondialrelay': typeof AdminRefreshMondialrelayRoute
+  '/refresh-vinted': typeof AdminRefreshVintedRoute
+  '/admin/login': typeof AdminLoginRoute
   '/api/public/refresh-pudos': typeof ApiPublicRefreshPudosRoute
   '/api/public/hooks/enrich-vinted-go': typeof ApiPublicHooksEnrichVintedGoRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
-  '/dashboard': typeof DashboardRoute
-  '/refresh-chronopost': typeof RefreshChronopostRoute
-  '/refresh-mondialrelay': typeof RefreshMondialrelayRoute
-  '/refresh-vinted': typeof RefreshVintedRoute
+  '/dashboard': typeof AdminDashboardRoute
+  '/refresh-chronopost': typeof AdminRefreshChronopostRoute
+  '/refresh-mondialrelay': typeof AdminRefreshMondialrelayRoute
+  '/refresh-vinted': typeof AdminRefreshVintedRoute
+  '/admin/login': typeof AdminLoginRoute
   '/api/public/refresh-pudos': typeof ApiPublicRefreshPudosRoute
   '/api/public/hooks/enrich-vinted-go': typeof ApiPublicHooksEnrichVintedGoRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
-  '/dashboard': typeof DashboardRoute
-  '/refresh-chronopost': typeof RefreshChronopostRoute
-  '/refresh-mondialrelay': typeof RefreshMondialrelayRoute
-  '/refresh-vinted': typeof RefreshVintedRoute
+  '/_admin': typeof AdminRouteRouteWithChildren
+  '/_admin/dashboard': typeof AdminDashboardRoute
+  '/_admin/refresh-chronopost': typeof AdminRefreshChronopostRoute
+  '/_admin/refresh-mondialrelay': typeof AdminRefreshMondialrelayRoute
+  '/_admin/refresh-vinted': typeof AdminRefreshVintedRoute
+  '/admin/login': typeof AdminLoginRoute
   '/api/public/refresh-pudos': typeof ApiPublicRefreshPudosRoute
   '/api/public/hooks/enrich-vinted-go': typeof ApiPublicHooksEnrichVintedGoRoute
 }
@@ -90,6 +106,7 @@ export interface FileRouteTypes {
     | '/refresh-chronopost'
     | '/refresh-mondialrelay'
     | '/refresh-vinted'
+    | '/admin/login'
     | '/api/public/refresh-pudos'
     | '/api/public/hooks/enrich-vinted-go'
   fileRoutesByTo: FileRoutesByTo
@@ -99,57 +116,37 @@ export interface FileRouteTypes {
     | '/refresh-chronopost'
     | '/refresh-mondialrelay'
     | '/refresh-vinted'
+    | '/admin/login'
     | '/api/public/refresh-pudos'
     | '/api/public/hooks/enrich-vinted-go'
   id:
     | '__root__'
     | '/'
-    | '/dashboard'
-    | '/refresh-chronopost'
-    | '/refresh-mondialrelay'
-    | '/refresh-vinted'
+    | '/_admin'
+    | '/_admin/dashboard'
+    | '/_admin/refresh-chronopost'
+    | '/_admin/refresh-mondialrelay'
+    | '/_admin/refresh-vinted'
+    | '/admin/login'
     | '/api/public/refresh-pudos'
     | '/api/public/hooks/enrich-vinted-go'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
-  DashboardRoute: typeof DashboardRoute
-  RefreshChronopostRoute: typeof RefreshChronopostRoute
-  RefreshMondialrelayRoute: typeof RefreshMondialrelayRoute
-  RefreshVintedRoute: typeof RefreshVintedRoute
+  AdminRouteRoute: typeof AdminRouteRouteWithChildren
+  AdminLoginRoute: typeof AdminLoginRoute
   ApiPublicRefreshPudosRoute: typeof ApiPublicRefreshPudosRoute
   ApiPublicHooksEnrichVintedGoRoute: typeof ApiPublicHooksEnrichVintedGoRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/refresh-vinted': {
-      id: '/refresh-vinted'
-      path: '/refresh-vinted'
-      fullPath: '/refresh-vinted'
-      preLoaderRoute: typeof RefreshVintedRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/refresh-mondialrelay': {
-      id: '/refresh-mondialrelay'
-      path: '/refresh-mondialrelay'
-      fullPath: '/refresh-mondialrelay'
-      preLoaderRoute: typeof RefreshMondialrelayRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/refresh-chronopost': {
-      id: '/refresh-chronopost'
-      path: '/refresh-chronopost'
-      fullPath: '/refresh-chronopost'
-      preLoaderRoute: typeof RefreshChronopostRouteImport
-      parentRoute: typeof rootRouteImport
-    }
-    '/dashboard': {
-      id: '/dashboard'
-      path: '/dashboard'
-      fullPath: '/dashboard'
-      preLoaderRoute: typeof DashboardRouteImport
+    '/_admin': {
+      id: '/_admin'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof AdminRouteRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/': {
@@ -158,6 +155,41 @@ declare module '@tanstack/react-router' {
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/admin/login': {
+      id: '/admin/login'
+      path: '/admin/login'
+      fullPath: '/admin/login'
+      preLoaderRoute: typeof AdminLoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_admin/refresh-vinted': {
+      id: '/_admin/refresh-vinted'
+      path: '/refresh-vinted'
+      fullPath: '/refresh-vinted'
+      preLoaderRoute: typeof AdminRefreshVintedRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/_admin/refresh-mondialrelay': {
+      id: '/_admin/refresh-mondialrelay'
+      path: '/refresh-mondialrelay'
+      fullPath: '/refresh-mondialrelay'
+      preLoaderRoute: typeof AdminRefreshMondialrelayRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/_admin/refresh-chronopost': {
+      id: '/_admin/refresh-chronopost'
+      path: '/refresh-chronopost'
+      fullPath: '/refresh-chronopost'
+      preLoaderRoute: typeof AdminRefreshChronopostRouteImport
+      parentRoute: typeof AdminRouteRoute
+    }
+    '/_admin/dashboard': {
+      id: '/_admin/dashboard'
+      path: '/dashboard'
+      fullPath: '/dashboard'
+      preLoaderRoute: typeof AdminDashboardRouteImport
+      parentRoute: typeof AdminRouteRoute
     }
     '/api/public/refresh-pudos': {
       id: '/api/public/refresh-pudos'
@@ -176,25 +208,31 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface AdminRouteRouteChildren {
+  AdminDashboardRoute: typeof AdminDashboardRoute
+  AdminRefreshChronopostRoute: typeof AdminRefreshChronopostRoute
+  AdminRefreshMondialrelayRoute: typeof AdminRefreshMondialrelayRoute
+  AdminRefreshVintedRoute: typeof AdminRefreshVintedRoute
+}
+
+const AdminRouteRouteChildren: AdminRouteRouteChildren = {
+  AdminDashboardRoute: AdminDashboardRoute,
+  AdminRefreshChronopostRoute: AdminRefreshChronopostRoute,
+  AdminRefreshMondialrelayRoute: AdminRefreshMondialrelayRoute,
+  AdminRefreshVintedRoute: AdminRefreshVintedRoute,
+}
+
+const AdminRouteRouteWithChildren = AdminRouteRoute._addFileChildren(
+  AdminRouteRouteChildren,
+)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
-  DashboardRoute: DashboardRoute,
-  RefreshChronopostRoute: RefreshChronopostRoute,
-  RefreshMondialrelayRoute: RefreshMondialrelayRoute,
-  RefreshVintedRoute: RefreshVintedRoute,
+  AdminRouteRoute: AdminRouteRouteWithChildren,
+  AdminLoginRoute: AdminLoginRoute,
   ApiPublicRefreshPudosRoute: ApiPublicRefreshPudosRoute,
   ApiPublicHooksEnrichVintedGoRoute: ApiPublicHooksEnrichVintedGoRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}

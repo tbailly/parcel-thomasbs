@@ -10,7 +10,7 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as RefreshVintedRouteImport } from './routes/refresh-vinted'
-import { Route as RefreshRouteImport } from './routes/refresh'
+import { Route as RefreshMondialrelayRouteImport } from './routes/refresh-mondialrelay'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApiPublicRefreshPudosRouteImport } from './routes/api/public/refresh-pudos'
@@ -21,9 +21,9 @@ const RefreshVintedRoute = RefreshVintedRouteImport.update({
   path: '/refresh-vinted',
   getParentRoute: () => rootRouteImport,
 } as any)
-const RefreshRoute = RefreshRouteImport.update({
-  id: '/refresh',
-  path: '/refresh',
+const RefreshMondialrelayRoute = RefreshMondialrelayRouteImport.update({
+  id: '/refresh-mondialrelay',
+  path: '/refresh-mondialrelay',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DashboardRoute = DashboardRouteImport.update({
@@ -51,7 +51,7 @@ const ApiPublicHooksEnrichVintedGoRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRoute
-  '/refresh': typeof RefreshRoute
+  '/refresh-mondialrelay': typeof RefreshMondialrelayRoute
   '/refresh-vinted': typeof RefreshVintedRoute
   '/api/public/refresh-pudos': typeof ApiPublicRefreshPudosRoute
   '/api/public/hooks/enrich-vinted-go': typeof ApiPublicHooksEnrichVintedGoRoute
@@ -59,7 +59,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRoute
-  '/refresh': typeof RefreshRoute
+  '/refresh-mondialrelay': typeof RefreshMondialrelayRoute
   '/refresh-vinted': typeof RefreshVintedRoute
   '/api/public/refresh-pudos': typeof ApiPublicRefreshPudosRoute
   '/api/public/hooks/enrich-vinted-go': typeof ApiPublicHooksEnrichVintedGoRoute
@@ -68,7 +68,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRoute
-  '/refresh': typeof RefreshRoute
+  '/refresh-mondialrelay': typeof RefreshMondialrelayRoute
   '/refresh-vinted': typeof RefreshVintedRoute
   '/api/public/refresh-pudos': typeof ApiPublicRefreshPudosRoute
   '/api/public/hooks/enrich-vinted-go': typeof ApiPublicHooksEnrichVintedGoRoute
@@ -78,7 +78,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/dashboard'
-    | '/refresh'
+    | '/refresh-mondialrelay'
     | '/refresh-vinted'
     | '/api/public/refresh-pudos'
     | '/api/public/hooks/enrich-vinted-go'
@@ -86,7 +86,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/dashboard'
-    | '/refresh'
+    | '/refresh-mondialrelay'
     | '/refresh-vinted'
     | '/api/public/refresh-pudos'
     | '/api/public/hooks/enrich-vinted-go'
@@ -94,7 +94,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/dashboard'
-    | '/refresh'
+    | '/refresh-mondialrelay'
     | '/refresh-vinted'
     | '/api/public/refresh-pudos'
     | '/api/public/hooks/enrich-vinted-go'
@@ -103,7 +103,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   DashboardRoute: typeof DashboardRoute
-  RefreshRoute: typeof RefreshRoute
+  RefreshMondialrelayRoute: typeof RefreshMondialrelayRoute
   RefreshVintedRoute: typeof RefreshVintedRoute
   ApiPublicRefreshPudosRoute: typeof ApiPublicRefreshPudosRoute
   ApiPublicHooksEnrichVintedGoRoute: typeof ApiPublicHooksEnrichVintedGoRoute
@@ -118,11 +118,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof RefreshVintedRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/refresh': {
-      id: '/refresh'
-      path: '/refresh'
-      fullPath: '/refresh'
-      preLoaderRoute: typeof RefreshRouteImport
+    '/refresh-mondialrelay': {
+      id: '/refresh-mondialrelay'
+      path: '/refresh-mondialrelay'
+      fullPath: '/refresh-mondialrelay'
+      preLoaderRoute: typeof RefreshMondialrelayRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/dashboard': {
@@ -159,7 +159,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   DashboardRoute: DashboardRoute,
-  RefreshRoute: RefreshRoute,
+  RefreshMondialrelayRoute: RefreshMondialrelayRoute,
   RefreshVintedRoute: RefreshVintedRoute,
   ApiPublicRefreshPudosRoute: ApiPublicRefreshPudosRoute,
   ApiPublicHooksEnrichVintedGoRoute: ApiPublicHooksEnrichVintedGoRoute,

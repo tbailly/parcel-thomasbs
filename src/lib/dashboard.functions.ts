@@ -120,7 +120,7 @@ export type QueryPoint = {
   notes: string | null;
   hours_fetched_at: string | null;
   updated_at: string;
-  opening_hours: unknown;
+  opening_hours: Record<string, unknown> | null;
 };
 
 export const getQueryPoints = createServerFn({ method: "GET" })
@@ -145,7 +145,7 @@ export const getQueryPoints = createServerFn({ method: "GET" })
         notes: p.notes as string | null,
         hours_fetched_at: p.hours_fetched_at as string | null,
         updated_at: p.updated_at as string,
-        opening_hours: p.opening_hours,
+        opening_hours: (p.opening_hours as Record<string, unknown> | null) ?? null,
       })),
     };
   });

@@ -102,17 +102,36 @@ async function fetchVintedList(bbox: {
   }
 }
 
+// Next.js Server Action ID for "fetch carrier point detail". Hardcoded from a captured HAR;
+// if Vinted redeploys with a new bundle this hash will change and we'll get a 404 / empty body.
+// In that case, re-capture from devtools (POST to /fr/carrier-locations with header `Next-Action`).
+const VINTED_POINT_ACTION_ID = "7fc9819dd7c70178c13da184ff30c7fc9996d057f4";
+const VINTED_ROUTER_STATE_TREE =
+  "%5B%22%22%2C%7B%22children%22%3A%5B%5B%22locale%22%2C%22fr%22%2C%22d%22%5D%2C%7B%22children%22%3A%5B%22(vintedgo)%22%2C%7B%22children%22%3A%5B%22carrier-locations%22%2C%7B%22children%22%3A%5B%22__PAGE__%22%2C%7B%7D%2Cnull%2Cnull%5D%7D%2Cnull%2Cnull%5D%7D%2Cnull%2Cnull%2Ctrue%5D%7D%2Cnull%2Cnull%5D%7D%2Cnull%2Cnull%5D";
+
 async function fetchVintedPointHours(externalId: string): Promise<{
   hours: RawBusinessHour[] | null;
   status: number;
   error: string | null;
 }> {
-  // selected_point=<id> renders the detail panel in the same RSC payload.
-  // Use a moderately sized bbox; doesn't matter much, but we must include one.
-  const bbox = { north: 50, east: 6, south: 42, west: -5 }; // FR-wide; harmless, server still returns the selected point
-  const url = `https://vintedgo.com/fr/carrier-locations?region=europe&country=fr&bounds=${buildBoundsParam(bbox)}&selected_point=${externalId}&_rsc=1`;
+  // The point-detail endpoint is a Next.js Server Action (POST), not a GET RSC payload.
+  // URL still needs region/country/bounds/selected_point in the querystring (mimicking the in-app navigation).
+  const bbox = { north: 50, east: 6, south: 42, west: -5 };
+  const url = `https://vintedgo.com/fr/carrier-locations?region=europe&country=fr&bounds=${buildBoundsParam(bbox)}&selected_point=${externalId}`;
   try {
-    const res = await fetch(url, { method: "GET", headers: COMMON_HEADERS });
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "User-Agent": UA,
+        Accept: "text/x-component",
+        "Accept-Language": "fr,fr-FR;q=0.9,en;q=0.7",
+        "Content-Type": "text/plain;charset=UTF-8",
+        "Next-Action": VINTED_POINT_ACTION_ID,
+        "Next-Router-State-Tree": VINTED_ROUTER_STATE_TREE,
+        Referer: url,
+      },
+      body: JSON.stringify([String(externalId)]),
+    });
     const body = await res.text();
     if (res.status !== 200) {
       return { hours: null, status: res.status, error: `http ${res.status} ${body.slice(0, 200)}` };
@@ -129,6 +148,7 @@ async function fetchVintedPointHours(externalId: string): Promise<{
     return { hours: null, status: 0, error: err instanceof Error ? err.message : String(err) };
   }
 }
+
 
 function rawHoursToOpeningHours(raw: RawBusinessHour[]): OpeningHours {
   const out: OpeningHours = {};

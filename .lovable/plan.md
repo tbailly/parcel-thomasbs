@@ -1,44 +1,83 @@
-# Carte : agrégats, pins maison, couleurs de marque
 
-## 1. Agrégats — chiffre blanc, pas de disque
+## Réponse rapide à ta question
 
-Dans `buildClusterDiamond` (`src/components/PickupMap.tsx`) :
-- Supprimer le `<circle cx="28" cy="26" r="13" ...>` blanc au centre.
-- Garder les dots colorés des providers présents (un par provider, gris profond par défaut sur le contour).
-- Recentrer le `<text>` du compte (actuellement à `y="30"`) vers `y="30"` mais en `fill="#ffffff"`, `font-weight="700"`, taille ~15 et avec un léger `text-shadow` via `paint-order:stroke` + `stroke="rgba(0,0,0,0.35)"` `stroke-width="2.5"` pour rester lisible sur n'importe quelle teinte de losange.
-- Déplacer la ligne de dots juste sous le chiffre (vers `cy="42"`) pour qu'elle reste visible.
+**Non, tu n'as pas besoin de créer d'utilisateur Supabase.** La sécurité DB repose déjà sur deux choses :
 
-## 2. Pin "Maison" par adresse
+1. **RLS** : aucune policy `INSERT/UPDATE/DELETE` n'existe sur tes tables → ni `anon` ni `authenticated` ne peuvent écrire. Donc même si quelqu'un récupère ton anon key (elle est publique de toute façon), il ne peut rien modifier.
+2. **Toutes les écritures passent par `supabaseAdmin`** (service role) dans des `createServerFn` côté serveur. La service role key ne quitte jamais le Worker.
 
-Le backend a déjà une table `home_addresses` (2 entrées : "Maison" 93400, "Vibe" 75009) — actuellement on n'affiche qu'un seul `circleMarker` pour `app_config.center_address`.
+Le seul vrai trou aujourd'hui : **n'importe qui peut appeler tes server fns** (refresh Chronopost, scrape Mondial Relay, enrich Vinted Go…) en visitant `/refresh-chronopost` etc. Il faut donc juste **gater ces appels**.
 
-- Étendre `getMapData` (`src/lib/pickup-points.functions.ts`) pour retourner aussi `homes: { id, name, lat, lng }[]` lu depuis `home_addresses` (ordre `position, created_at`).
-- Dans `PickupMap` : remplacer le `circleMarker` unique par une boucle sur `homes`. Chaque pin = `L.divIcon` losange vert (même langage visuel que les pins relais Holo, taille ~44px), avec :
-  - couleur verte vive (ex. `#16A34A` — token Tailwind `green-600` adapté au thème beige clair),
-  - icône maison SVG (path Lucide `home`) en blanc au centre, plus de logo provider,
-  - tooltip avec le `name` de l'adresse.
-- Les pins maison vont sur une `L.layerGroup` séparée, ajoutée directement à la carte (hors cluster) pour qu'ils restent toujours visibles et ne soient pas agrégés avec les points relais.
+## Approche KISS proposée
 
-## 3. Couleurs de marque providers
+**Un mot de passe admin unique stocké en secret + cookie de session signé HMAC.** Zéro dépendance tierce, zéro user Supabase, ~80 lignes de code.
 
-Migration SQL pour mettre à jour `providers.color` avec les hex officiels actuels des chartes (`Chronopost` et `Vinted Go` restent proches — assumé par l'utilisateur) :
+### Pourquoi pas Supabase Auth ?
+- Tu es seul utilisateur → pas besoin de gestion de comptes, recovery email, OAuth.
+- Évite le couplage à un provider tiers comme demandé.
+- Évite la complexité du gate `_authenticated`, du middleware bearer, etc.
 
-| Provider | Actuel | Proposé | Source |
-|---|---|---|---|
-| Mondial Relay | `#E2001A` | `#E2001A` | inchangé (déjà la rouge officielle de la charte) |
-| Chronopost | `#00925A` | `#00A04B` | vert chronopost.com (logo + header actuels) |
-| Vinted Go | `#09B1BA` | `#09B1BA` | inchangé (teal Vinted Go) |
+### Pourquoi pas juste un header `x-admin-token` partagé ?
+- Stocker un token long en localStorage est OK mais un cookie `HttpOnly` est strictement plus sûr (XSS ne peut pas l'exfiltrer) pour le même effort.
 
-Si tu veux des hex différents (par ex. le `#007782` Vinted historique au lieu du teal Vinted Go), dis-le moi avant qu'on lance la migration.
+## Détails techniques
 
-## Fichiers touchés
+### 1. Nouveau secret
+`ADMIN_PASSWORD` (mot de passe que tu choisis) et `ADMIN_SESSION_SECRET` (32 bytes random pour signer les cookies). Je te demanderai les deux via `add_secret`.
 
-- `src/components/PickupMap.tsx` — cluster SVG, pin maison, layer homes.
-- `src/lib/pickup-points.functions.ts` — ajout `homes` dans `getMapData`.
-- `src/routes/index.tsx` — passage de `homes` à `<PickupMap />` si la prop est typée.
-- Migration SQL — `UPDATE providers SET color = ... WHERE id IN ('chronopost')`.
+### 2. Helpers serveur `src/lib/admin-auth.server.ts`
+- `signSession(expiresAt)` → `${expiresAt}.${hmacSHA256(expiresAt, ADMIN_SESSION_SECRET)}` (base64url). Node `crypto` natif, dispo dans le Worker.
+- `verifySession(cookieValue)` → vérifie HMAC en `timingSafeEqual` + expiration. Retourne `boolean`.
+- `requireAdmin()` → lit le cookie `admin_session` via `getRequestHeader('cookie')`, throw `Error('Unauthorized')` si invalide.
 
-## Hors scope
+### 3. Middleware `requireAdmin` (TanStack)
+```ts
+export const requireAdmin = createMiddleware({ type: 'function' }).server(async ({ next }) => {
+  if (!verifySessionFromRequest()) throw new Error('Unauthorized');
+  return next();
+});
+```
+À ajouter sur **toutes les server fns mutantes** : `importPickupPointsJson`, `refreshChronopost`, `scrapeMondialRelay*`, `refreshVintedGoList`, `enrichVintedGoBatch`. Les `getXxxStats` / `getDashboardOverview` restent ouverts (read-only, déjà accessibles via les tables publiques).
 
-- Pas de changement sur les pins providers (style Holo conservé tel quel).
-- Pas de UI pour gérer les `home_addresses` (la table existe déjà avec ses entrées).
+### 4. Server fns d'auth `src/lib/admin-auth.functions.ts`
+- `adminLogin({ password })` : compare `timingSafeEqual` avec `ADMIN_PASSWORD`, pose cookie `admin_session=<signed>; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=2592000` (30j) via `setResponseHeader('Set-Cookie', ...)`. Petit rate-limit en mémoire (Map IP→tentatives) pour ralentir le brute-force.
+- `adminLogout()` : pose le cookie expiré.
+- `adminMe()` : retourne `{ authenticated: boolean }` pour que l'UI sache afficher login ou pas.
+
+### 5. Route `/admin/login`
+Page publique avec input password + bouton. Sur succès → `router.invalidate()` + redirect.
+
+### 6. Gate UI
+Les pages `/refresh-chronopost`, `/refresh-mondialrelay`, `/refresh-vinted`, `/dashboard` deviennent un layout `_admin/` :
+- `src/routes/_admin/route.tsx` : `beforeLoad` appelle `adminMe()`, si non auth → `throw redirect({ to: '/admin/login' })`. `ssr: false` (cookie déjà géré côté Worker, mais on s'épargne le SSR pour ce sous-arbre).
+- Déplacer les routes existantes : `_admin/refresh-chronopost.tsx`, etc.
+
+### 7. Endpoint webhook `/api/public/hooks/enrich-vinted-go`
+Déjà protégé par `apikey` = `SUPABASE_PUBLISHABLE_KEY`. **Faut changer ça** : créer `CRON_SECRET` dédié, vérifier `request.headers.get('authorization') === 'Bearer ${CRON_SECRET}'`. La publishable key n'est pas un secret.
+
+## Modèle de menace couvert
+
+| Risque | Mitigation |
+|---|---|
+| Écriture DB depuis le navigateur (anon/auth) | RLS sans policy write (déjà en place) |
+| Appel direct de server fn mutante | Middleware `requireAdmin` + cookie signé |
+| Vol du cookie via XSS | `HttpOnly` + `Secure` + `SameSite=Lax` |
+| Brute-force password | `timingSafeEqual` + rate-limit IP + password long |
+| Webhook cron appelé par un tiers | `CRON_SECRET` dédié (pas la publishable key) |
+| Service role key fuite | Reste dans `client.server.ts`, jamais bundlé client |
+
+## Plan d'exécution
+
+1. Demander `ADMIN_PASSWORD` et `ADMIN_SESSION_SECRET` (+ `CRON_SECRET`) via `add_secret`.
+2. Créer `src/lib/admin-auth.server.ts` (HMAC + cookie helpers) et `admin-auth.functions.ts` (login/logout/me + middleware).
+3. Ajouter `.middleware([requireAdmin])` sur les 5–6 server fns mutantes listées.
+4. Créer `src/routes/admin.login.tsx` (page de login publique).
+5. Créer `src/routes/_admin/route.tsx` (gate) et déplacer `refresh-*` + `dashboard` dessous.
+6. Patcher `/api/public/hooks/enrich-vinted-go` pour utiliser `CRON_SECRET`.
+7. Tester : login OK, accès refresh OK, logout coupe l'accès, appel direct serverFn sans cookie → 401.
+
+## Limites assumées (KISS)
+
+- Pas de récupération de mot de passe : si tu l'oublies, tu modifies le secret.
+- Pas de multi-user : ajout possible plus tard via Supabase Auth si besoin.
+- Rate-limit en mémoire : reset à chaque redémarrage du Worker. Suffisant vu qu'un seul mot de passe long est utilisé.

@@ -43,6 +43,17 @@ type RawPoint = {
   latitude?: string | number;
   longitude?: string | number;
   listopeninghours?: { day: number; openinghours: string | null }[];
+  // Champs optionnels potentiellement utilisés pour filtrer les points obsolètes
+  holidaysList?: { dayStart?: string; dayEnd?: string }[];
+  closingPeriodList?: { dayStart?: string; dayEnd?: string }[];
+  listclosing?: { dayStart?: string; dayEnd?: string }[];
+  enabled?: boolean;
+  disabled?: boolean;
+  active?: boolean;
+  inService?: boolean;
+  code?: string;
+  status?: string;
+  [key: string]: unknown;
 };
 
 type RawResp = {

@@ -317,11 +317,13 @@ export const refreshChronopost = createServerFn({ method: "POST" })
       else upserted = count ?? mapped.length;
     }
 
+    const skipSummary = `skipped: closed=${skipped.closed} noHours=${skipped.noHours} badType=${skipped.badType} badCoords=${skipped.badCoords} dateClosed=${skipped.dateClosed}`;
+    const sampleSummary = sampleKeys ? ` | raw_fields=[${sampleKeys.join(",")}]` : "";
     await finalize({
       status: dbError ? "error" : "success",
       raw_count: dedup.size,
       inserted_count: upserted,
-      error: [reports.join(" | "), dbError].filter(Boolean).join(" || ") || null,
+      error: [reports.join(" | "), skipSummary + sampleSummary, dbError].filter(Boolean).join(" || ") || null,
     });
 
     return {

@@ -200,10 +200,11 @@ function makeHomeIcon(): L.DivIcon {
 
 let clusterUidCounter = 0;
 
-export function PickupMap({ providers, points, config }: Props) {
+export function PickupMap({ providers, points, config, homes }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const clusterRef = useRef<L.MarkerClusterGroup | null>(null);
+  const homesLayerRef = useRef<L.LayerGroup | null>(null);
   const [enabled, setEnabled] = useState<Record<string, boolean>>(
     () => Object.fromEntries(providers.map((p) => [p.id, true])),
   );
@@ -227,17 +228,6 @@ export function PickupMap({ providers, points, config }: Props) {
       maxZoom: 20,
       className: "pudo-tiles-beige",
     }).addTo(map);
-
-    // Center marker
-    L.circleMarker([config.center_lat, config.center_lng], {
-      radius: 6,
-      color: "#1f2937",
-      fillColor: "#1f2937",
-      fillOpacity: 0.9,
-      weight: 2,
-    })
-      .bindTooltip(config.center_address, { direction: "top" })
-      .addTo(map);
 
     const cluster = L.markerClusterGroup({
       showCoverageOnHover: false,
@@ -263,15 +253,33 @@ export function PickupMap({ providers, points, config }: Props) {
       },
     });
     map.addLayer(cluster);
+
+    // Homes layer (not clustered, always visible above tiles)
+    const homesLayer = L.layerGroup().addTo(map);
+
     mapRef.current = map;
     clusterRef.current = cluster;
+    homesLayerRef.current = homesLayer;
 
     return () => {
       map.remove();
       mapRef.current = null;
       clusterRef.current = null;
+      homesLayerRef.current = null;
     };
-  }, [config.center_lat, config.center_lng, config.center_address, config.default_zoom]);
+  }, [config.center_lat, config.center_lng, config.default_zoom]);
+
+  // Sync home pins
+  useEffect(() => {
+    const layer = homesLayerRef.current;
+    if (!layer) return;
+    layer.clearLayers();
+    for (const home of homes) {
+      L.marker([home.lat, home.lng], { icon: makeHomeIcon(), zIndexOffset: 1000 })
+        .bindTooltip(home.name, { direction: "top", offset: [0, -HOME_SIZE / 2 + 4] })
+        .addTo(layer);
+    }
+  }, [homes]);
 
   // Sync markers when filters change
   useEffect(() => {
@@ -294,6 +302,8 @@ export function PickupMap({ providers, points, config }: Props) {
     }
     cluster.addLayers(markers);
   }, [points, enabled, providerById]);
+
+
 
   return (
     <div className="relative h-screen w-screen">

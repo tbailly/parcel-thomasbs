@@ -78,14 +78,18 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
     meta: [
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Lovable App" },
-      { name: "description", content: "Lovable Generated Project" },
+      { title: "Parcel" },
+      { name: "description", content: "Displays a map of parcel lockers and drop-off points in France, integrating data from multiple providers." },
       { name: "author", content: "Lovable" },
-      { property: "og:title", content: "Lovable App" },
-      { property: "og:description", content: "Lovable Generated Project" },
+      { property: "og:title", content: "Parcel" },
+      { property: "og:description", content: "Displays a map of parcel lockers and drop-off points in France, integrating data from multiple providers." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
       { name: "twitter:site", content: "@Lovable" },
+      { name: "twitter:title", content: "Parcel" },
+      { name: "twitter:description", content: "Displays a map of parcel lockers and drop-off points in France, integrating data from multiple providers." },
+      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/c9366a64-ea0b-43bf-8c59-ff3d0040dfae/id-preview-c3eed25d--a6e6dce0-50f1-4e53-949b-4dc21b6d4ad7.lovable.app-1780844276683.png" },
+      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/c9366a64-ea0b-43bf-8c59-ff3d0040dfae/id-preview-c3eed25d--a6e6dce0-50f1-4e53-949b-4dc21b6d4ad7.lovable.app-1780844276683.png" },
     ],
     links: [
       {

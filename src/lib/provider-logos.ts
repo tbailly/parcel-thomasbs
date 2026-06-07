@@ -1,5 +1,5 @@
 import mondialRelay from "@/assets/providers/mondial-relay.png";
-import chronopost from "@/assets/providers/chronopost.svg";
+import chronopost from "@/assets/providers/chronopost.png";
 import vintedGo from "@/assets/providers/vinted-go.png";
 
 // Keyed by provider.id (db slug)

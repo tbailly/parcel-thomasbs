@@ -4,9 +4,11 @@ import "leaflet/dist/leaflet.css";
 import "leaflet.markercluster";
 import "leaflet.markercluster/dist/MarkerCluster.css";
 import "leaflet.markercluster/dist/MarkerCluster.Default.css";
-import { Navigation, X } from "lucide-react";
+import { X } from "lucide-react";
 import type { AppConfig, HomeAddress, OpeningHours, PickupPoint, Provider } from "@/lib/pickup-points.functions";
 import { getProviderLogo } from "@/lib/provider-logos";
+import googleMapsLogo from "@/assets/apps/google-maps.png";
+import citymapperLogo from "@/assets/apps/citymapper.png";
 
 type Props = {
   providers: Provider[];
@@ -422,50 +424,33 @@ function PointSheet({ point, provider, onClose }: { point: PickupPoint | null; p
               <div className="mt-2 rounded-lg bg-gray-100/80 px-2.5 py-1.5 text-[11px] text-gray-700">{point.notes}</div>
             )}
 
-            <div className="mt-3 grid grid-cols-2 gap-2">
+            <div className="mt-3 flex items-center justify-end gap-2">
               <a
                 href={gmapsUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center justify-center gap-1.5 rounded-xl border border-white/60 bg-white/80 py-2 text-[13px] font-medium text-gray-800 shadow-sm backdrop-blur transition hover:bg-white"
-                style={{ boxShadow: `0 0 0 1px ${c}22, 0 4px 12px -6px ${c}44` }}
+                aria-label="Itinéraire Google Maps"
+                title="Google Maps"
+                className="flex h-8 w-8 items-center justify-center rounded-full border border-white/60 bg-white/80 shadow-sm backdrop-blur transition hover:bg-white"
+                style={{ boxShadow: `0 0 0 1px ${c}22` }}
               >
-                <GoogleMapsIcon />
-                Google Maps
+                <img src={googleMapsLogo} alt="" width={16} height={16} className="object-contain" />
               </a>
               <a
                 href={citymapperUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center justify-center gap-1.5 rounded-xl border border-white/60 bg-white/80 py-2 text-[13px] font-medium text-gray-800 shadow-sm backdrop-blur transition hover:bg-white"
-                style={{ boxShadow: `0 0 0 1px ${c}22, 0 4px 12px -6px ${c}44` }}
+                aria-label="Itinéraire Citymapper"
+                title="Citymapper"
+                className="flex h-8 w-8 items-center justify-center rounded-full border border-white/60 bg-white/80 shadow-sm backdrop-blur transition hover:bg-white"
+                style={{ boxShadow: `0 0 0 1px ${c}22` }}
               >
-                <CitymapperIcon />
-                Citymapper
+                <img src={citymapperLogo} alt="" width={16} height={16} className="rounded-[4px] object-contain" />
               </a>
             </div>
           </div>
         </div>
       </div>
     </>
-  );
-}
-
-function GoogleMapsIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden>
-      <path d="M12 2C7.6 2 4 5.6 4 10c0 5.6 8 12 8 12s8-6.4 8-12c0-4.4-3.6-8-8-8z" fill="#EA4335" />
-      <circle cx="12" cy="10" r="3" fill="#fff" />
-    </svg>
-  );
-}
-
-function CitymapperIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden>
-      <rect x="2" y="2" width="20" height="20" rx="5" fill="#0099D5" />
-      <path d="M7 12c0-2.8 2.2-5 5-5 1.7 0 3.2.8 4.1 2.1l-1.7 1.2A3 3 0 0 0 9 12a3 3 0 0 0 5.4 1.7l1.7 1.2A5 5 0 0 1 7 12z" fill="#fff" />
-      <circle cx="16.5" cy="7.5" r="1.5" fill="#FFD400" />
-    </svg>
   );
 }

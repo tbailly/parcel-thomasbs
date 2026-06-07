@@ -60,26 +60,108 @@ function buildPopupHtml(point: PickupPoint, provider: Provider): string {
   `;
 }
 
-function makeIcon(provider: Provider): L.DivIcon {
-  const logo = getProviderLogo(provider);
-  const color = provider.color;
-  // Teardrop pin: circle on top + pointed tip at bottom. Tip = exact coordinate.
-  const html = `
-    <svg width="40" height="52" viewBox="0 0 40 52" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" style="display:block;filter:drop-shadow(0 2px 3px rgba(0,0,0,0.35))">
+type PinVariant = "holo" | "neon" | "glass";
+
+const PIN_SIZE = 48;
+
+function buildHoloDiamond(provider: Provider, logo: string, uid: string): string {
+  const c = provider.color;
+  return `
+    <svg width="${PIN_SIZE}" height="${PIN_SIZE}" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" style="display:block;overflow:visible">
       <defs>
-        <clipPath id="cl-${provider.id}"><circle cx="20" cy="20" r="13"/></clipPath>
+        <linearGradient id="hg-l-${uid}" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#ffffff"/>
+          <stop offset="1" stop-color="${c}" stop-opacity="0.18"/>
+        </linearGradient>
+        <linearGradient id="hg-r-${uid}" x1="1" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#e5e7eb"/>
+          <stop offset="1" stop-color="${c}" stop-opacity="0.25"/>
+        </linearGradient>
+        <filter id="hf-${uid}" x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation="2.4" result="b"/>
+          <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+        <clipPath id="hc-${uid}"><circle cx="24" cy="24" r="9.5"/></clipPath>
       </defs>
-      <path d="M20 51.5 C 20 51.5 6 32 4 24 A 18 18 0 1 1 36 24 C 34 32 20 51.5 20 51.5 Z"
-            fill="${color}" stroke="#ffffff" stroke-width="2.5" stroke-linejoin="round"/>
-      <circle cx="20" cy="20" r="13" fill="#ffffff"/>
-      <image href="${logo}" x="7" y="7" width="26" height="26" clip-path="url(#cl-${provider.id})" preserveAspectRatio="xMidYMid slice"/>
+      <g filter="url(#hf-${uid})">
+        <path d="M24 4 L44 24 L24 44 L4 24 Z" fill="${c}" opacity="0.35"/>
+      </g>
+      <path d="M24 4 L24 44 L4 24 Z" fill="url(#hg-l-${uid})"/>
+      <path d="M24 4 L44 24 L24 44 Z" fill="url(#hg-r-${uid})"/>
+      <path d="M24 4 L44 24 L24 44 L4 24 Z" fill="none" stroke="${c}" stroke-width="1.5" stroke-linejoin="round"/>
+      <circle cx="24" cy="24" r="10" fill="#fafafa" stroke="${c}" stroke-width="0.75" stroke-opacity="0.4"/>
+      <image href="${logo}" x="14" y="14" width="20" height="20" clip-path="url(#hc-${uid})" preserveAspectRatio="xMidYMid slice"/>
+      <path d="M24 2 L26 4 L22 4 Z M46 24 L44 26 L44 22 Z M24 46 L22 44 L26 44 Z M2 24 L4 22 L4 26 Z" fill="${c}" opacity="0.8"/>
     </svg>`;
+}
+
+function buildNeonCrystal(provider: Provider, logo: string, uid: string): string {
+  const c = provider.color;
+  return `
+    <svg width="${PIN_SIZE}" height="${PIN_SIZE}" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" style="display:block;overflow:visible">
+      <defs>
+        <filter id="nf-${uid}" x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation="2.8" result="b1"/>
+          <feMerge><feMergeNode in="b1"/><feMergeNode in="b1"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+        <clipPath id="nc-${uid}"><circle cx="24" cy="24" r="8.5"/></clipPath>
+      </defs>
+      <path d="M24 5 L43 24 L24 43 L5 24 Z" fill="none" stroke="${c}" stroke-width="2" stroke-linejoin="round" opacity="0.55" filter="url(#nf-${uid})"/>
+      <path d="M24 5 L43 24 L24 43 L5 24 Z" fill="rgba(15,23,42,0.06)" stroke="${c}" stroke-width="1.75" stroke-linejoin="round"/>
+      <circle cx="24" cy="24" r="9" fill="#0f172a" fill-opacity="0.88" stroke="${c}" stroke-width="0.75" stroke-opacity="0.7"/>
+      <image href="${logo}" x="15.5" y="15.5" width="17" height="17" clip-path="url(#nc-${uid})" preserveAspectRatio="xMidYMid slice" style="filter:brightness(1.6) contrast(0.9)"/>
+    </svg>`;
+}
+
+function buildGlassPrism(provider: Provider, logo: string, uid: string): string {
+  const c = provider.color;
+  return `
+    <svg width="${PIN_SIZE}" height="${PIN_SIZE}" viewBox="0 0 48 48" xmlns="http://www.w3.org/2000/svg" style="display:block;overflow:visible">
+      <defs>
+        <linearGradient id="gg-${uid}" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#ffffff" stop-opacity="0.85"/>
+          <stop offset="0.55" stop-color="#ffffff" stop-opacity="0.45"/>
+          <stop offset="1" stop-color="${c}" stop-opacity="0.25"/>
+        </linearGradient>
+        <linearGradient id="gs-${uid}" x1="0" y1="0" x2="1" y2="0.6">
+          <stop offset="0" stop-color="#ffffff" stop-opacity="0.9"/>
+          <stop offset="0.5" stop-color="#ffffff" stop-opacity="0"/>
+        </linearGradient>
+        <filter id="gf-${uid}" x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation="1.8" result="b"/>
+          <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+        <clipPath id="gc-${uid}"><circle cx="24" cy="24" r="9"/></clipPath>
+        <clipPath id="gd-${uid}"><path d="M24 5 L43 24 L24 43 L5 24 Z"/></clipPath>
+      </defs>
+      <path d="M24 5 L43 24 L24 43 L5 24 Z" fill="${c}" opacity="0.25" filter="url(#gf-${uid})"/>
+      <path d="M24 5 L43 24 L24 43 L5 24 Z" fill="url(#gg-${uid})" stroke="#ffffff" stroke-width="1.25" stroke-linejoin="round"/>
+      <g clip-path="url(#gd-${uid})">
+        <path d="M24 5 L43 24 L24 24 Z" fill="url(#gs-${uid})"/>
+      </g>
+      <path d="M24 5 L43 24 L24 43 L5 24 Z" fill="none" stroke="${c}" stroke-width="0.9" stroke-linejoin="round" opacity="0.85"/>
+      <circle cx="24" cy="24" r="9.5" fill="#ffffff" fill-opacity="0.7"/>
+      <image href="${logo}" x="15" y="15" width="18" height="18" clip-path="url(#gc-${uid})" preserveAspectRatio="xMidYMid slice"/>
+      <circle cx="36" cy="36" r="2.6" fill="${c}" stroke="#ffffff" stroke-width="0.9"/>
+    </svg>`;
+}
+
+let pinUidCounter = 0;
+function makeIcon(provider: Provider, variant: PinVariant): L.DivIcon {
+  const logo = getProviderLogo(provider);
+  const uid = `${variant}-${provider.id}-${++pinUidCounter}`;
+  const html =
+    variant === "holo"
+      ? buildHoloDiamond(provider, logo, uid)
+      : variant === "neon"
+      ? buildNeonCrystal(provider, logo, uid)
+      : buildGlassPrism(provider, logo, uid);
   return L.divIcon({
     className: "pudo-pin",
-    html,
-    iconSize: [40, 52],
-    iconAnchor: [20, 52],
-    popupAnchor: [0, -48],
+    html: `<div style="filter:drop-shadow(0 2px 4px rgba(0,0,0,0.25))">${html}</div>`,
+    iconSize: [PIN_SIZE, PIN_SIZE],
+    iconAnchor: [PIN_SIZE / 2, PIN_SIZE / 2],
+    popupAnchor: [0, -PIN_SIZE / 2 + 2],
   });
 }
 

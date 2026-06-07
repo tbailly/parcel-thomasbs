@@ -1,48 +1,56 @@
-## Contexte
+## Refonte de `/refresh-vinted`
 
-- La cascade FK est bien en place : `pickup_points.query_id → queries(id) ON DELETE CASCADE` et `enrichments.point_id → pickup_points(id) ON DELETE CASCADE`. La suppression d'une query supprime bien ses points.
-- Si tu n'as pas vu de cascade, c'est que les 173 points orphelins (chronopost: 5, shop2shop: 6, mondial_relay: 162) ont `query_id = NULL` — ils ont été insérés avant qu'on tracke la `query_id` et ne sont rattachés à aucune query, donc rien à cascader.
-- `latest_pickup_points` est une vue qui filtre les points de la dernière query "success" par provider. C'est notre définition d'"actifs".
+### Modèle de données
 
-## 1. Dashboard — affichage
+Nouvelle table `enrichment_jobs` pour matérialiser chaque batch d'enrichissement (le cron actuel n'écrit que des lignes par-point dans `enrichments`, pas de notion de "run").
 
-**Cartes provider** (`getDashboardOverview` + UI) :
+```text
+enrichment_jobs
+  id uuid pk
+  provider_id text         -- 'vinted_go' (extensible)
+  trigger text             -- 'cron' | 'manual'
+  status text              -- 'running' | 'success' | 'error'
+  started_at timestamptz
+  finished_at timestamptz
+  batch_size int
+  processed int
+  succeeded int
+  failed int
+  remaining_after int
+  error text
+```
 
-- Remplacer `total_points` (compte brut sur `pickup_points`) par un compte sur `latest_pickup_points` filtré par provider → `active_points`.
-- Supprimer la ligne "Statut" et le champ `last_query_status` du DTO/UI.
-- Garder : date du dernier refresh, points du dernier refresh, total points actifs.
+Migration : table + RLS `public read` + GRANTs (`anon/authenticated SELECT`, `service_role ALL`).
 
-**Table des queries** (`getProviderQueries` + UI) :
+### Backend (`src/lib/vinted-go.functions.ts`)
 
-- Retirer les colonnes "Raw" et "Insérés".
-- Ajouter une colonne "Sans horaires" = nombre de points de la query dont `opening_hours = '{}'::jsonb` (ou hours_fetched_at NULL — on retient `opening_hours` vide car c'est ce que l'UI montre).
-- Garder : Date, Statut, CP, Points actuels (rattachés à cette query), Sans horaires, Erreur, Supprimer.
-- Calcul : étendre le `GROUP BY query_id` actuel pour ramener aussi le count avec `opening_hours = '{}'`.
+- `enrichVintedGoBatchImpl(batchSize, trigger)` : insère une ligne `enrichment_jobs` (`running`) en début, la met à jour en fin avec compteurs + `finished_at` + `remaining_after` + `status`. Try/catch global : si throw, `status='error'` + message.
+- Hook cron `src/routes/api/public/hooks/enrich-vinted-go.ts` : passe `trigger='cron'`.
+- Server fn manuelle `enrichVintedGoBatch` : passe `trigger='manual'`.
+- Nouvelle `getVintedGoEnrichmentJobs` : 50 derniers jobs triés `started_at desc`.
+- `getVintedGoStats` : ajoute `inProgress` (true si job `running` existe OU `pending > 0`).
 
-**Sous-table des points d'une query** :
+### Frontend (`src/routes/refresh-vinted.tsx`)
 
-- Colonne "Horaires" : pastille verte (`opening_hours_json !== "{}"`) ou rouge sinon — remplace la date `hours_fetched_at`. Utiliser un point coloré + icône check/x lucide.
+Refonte complète, KISS :
 
-## 2. Mécanique — cleanup
+- **Header** : titre + courte explication.
+- **Bouton unique "Rafraîchir Vinted Go"** :
+  1. `refreshVintedGoList()`
+  2. `enrichVintedGoBatch({ batchSize: 5 })` (kickoff manuel immédiat — le cron toutes les 2 min prend ensuite le relais)
+  3. Toast + invalidation
+  Désactivé pendant l'exécution.
+- **Barre de progression** : `enriched / total`, label "X points en attente — enrichissement en cours" ou "Tout est enrichi".
+- **Tableau "Jobs d'enrichissement"** (`refetchInterval: 5000`) :
+  - Démarré · Durée · Source (cron/manuel) · Statut (badge animé si `running`) · Traités · OK · Échecs · Restants après · Erreur (tronquée)
+  - Auto-rafraîchi → on voit en direct chaque tick de cron arriver.
 
-Nouveau server fn `cleanupOrphans()` dans `src/lib/dashboard.functions.ts` :
+### Hors scope
+- Pas d'auth, pas de pagination, pas de boutons par job, pas de loop côté serveur (le cron existant draine — on garde le `*/2 * * * *` actuel).
+- Pas de modif du dashboard `/dashboard` ni des autres providers.
 
-- Supprime les `pickup_points` où `query_id IS NULL` OU dont le `query_id` ne référence plus aucune query (defensive, même si la FK l'empêche).
-- Les enrichments associés tombent en cascade. Supprime aussi les enrichments avec `point_id IS NULL` ou pointant dans le vide.
-- Renvoie `{ deleted_points, deleted_enrichments }`.
-
-**UI** : bouton "Nettoyer les orphelins" dans le header du dashboard, avec `AlertDialog` de confirmation et toast résultat. Invalide `dashboard-overview` et les listes de queries.
-
-**Exécution one-shot** : lancer un `DELETE FROM pickup_points WHERE query_id IS NULL` via outil migration/insert pour purger immédiatement les 173 points actuels (les enrichments tombent en cascade).
-
-## Détails techniques
-
-- `getDashboardOverview` : remplacer le `head:true count exact` sur `pickup_points` par un count sur `latest_pickup_points` filtré `provider_id`. Retirer `last_query_status`.
-- `getProviderQueries` : faire deux passes sur `pickup_points` par les `query_id` listés — une pour le count total, une pour le count `opening_hours = '{}'`. Comme PostgREST ne fait pas `jsonb='{}'` facilement, faire une `select query_id, opening_hours` et agréger côté JS (volume limité aux ~500 dernières queries × ~50 points moyens, OK pour KISS).
-- `dashboard.tsx` : retirer la colonne Raw/Insérés, ajouter "Sans horaires", remplacer la cellule horaires du sous-tableau par un badge vert/rouge, retirer la ligne statut des cartes, ajouter le bouton cleanup.
-
-## Hors scope
-
-- Pas de changement à `latest_pickup_points`, `PickupMap`, `/refresh`, `/refresh-vinted`, `/api/public/hooks/enrich-vinted-go`.
-- Pas de pagination/virtualisation.
-- Pas d'auth sur `/dashboard` ni sur le cleanup (suit le pattern actuel).
+### Fichiers touchés
+- `supabase/migrations/<ts>_enrichment_jobs.sql` (nouveau)
+- `src/lib/vinted-go.functions.ts` (modifié)
+- `src/routes/api/public/hooks/enrich-vinted-go.ts` (passer `trigger='cron'`)
+- `src/routes/refresh-vinted.tsx` (réécrit)

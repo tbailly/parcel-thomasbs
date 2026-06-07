@@ -287,7 +287,11 @@ export const refreshVintedGoList = createServerFn({ method: "POST" })
   });
 
 // Shared enrichment logic. Returns counts; never throws on per-point errors.
-export async function enrichVintedGoBatchImpl(batchSize: number): Promise<{
+export async function enrichVintedGoBatchImpl(
+  batchSize: number,
+  trigger: "cron" | "manual" = "manual",
+): Promise<{
+  jobId: string | null;
   processed: number;
   succeeded: number;
   failed: number;
@@ -296,106 +300,160 @@ export async function enrichVintedGoBatchImpl(batchSize: number): Promise<{
 }> {
   const samples: { external_id: string; status: string; error?: string }[] = [];
 
-  const { data: rows, error: selErr } = await supabaseAdmin
-    .from("pickup_points")
-    .select("id, external_id")
-    .eq("provider_id", PROVIDER_ID)
-    .is("hours_fetched_at", null)
-    .order("updated_at", { ascending: true })
-    .limit(batchSize);
+  // Create job row
+  const { data: jobRow } = await supabaseAdmin
+    .from("enrichment_jobs")
+    .insert({
+      provider_id: PROVIDER_ID,
+      trigger,
+      status: "running",
+      batch_size: batchSize,
+    })
+    .select("id")
+    .single();
+  const jobId = (jobRow?.id as string | undefined) ?? null;
 
-  if (selErr) {
-    return { processed: 0, succeeded: 0, failed: 0, remaining: 0, samples: [{ external_id: "-", status: "select-error", error: selErr.message }] };
-  }
-
-  const points = rows ?? [];
-  let succeeded = 0;
-  let failed = 0;
-
-  for (let i = 0; i < points.length; i++) {
-    if (i > 0) await jitter(2000, 5000);
-    const p = points[i];
-    const extId = (p.external_id ?? "").replace(/^vg-/, "");
-    if (!extId) {
-      failed++;
-      samples.push({ external_id: p.external_id ?? "-", status: "skip-no-ext-id" });
-      await supabaseAdmin.from("enrichments").insert({
-        point_id: p.id,
-        provider_id: PROVIDER_ID,
-        external_id: p.external_id,
-        status: "error",
-        error: "missing external_id",
-      });
-      continue;
-    }
-    const { hours, status, error } = await fetchVintedPointHours(extId);
-    if (!hours) {
-      failed++;
-      samples.push({ external_id: p.external_id ?? "-", status: `err-${status}`, error: error ?? undefined });
-      await supabaseAdmin.from("enrichments").insert({
-        point_id: p.id,
-        provider_id: PROVIDER_ID,
-        external_id: p.external_id,
-        status: "error",
-        error: `${status}: ${error ?? "no hours"}`.slice(0, 500),
-      });
-      // Don't mark hours_fetched_at: next cron tick will retry (natural backoff).
-      continue;
-    }
-    const oh = rawHoursToOpeningHours(hours);
-    const { error: updErr } = await supabaseAdmin
-      .from("pickup_points")
-      .update({
-        opening_hours: oh,
-        hours_fetched_at: new Date().toISOString(),
-      })
-      .eq("id", p.id);
-    if (updErr) {
-      failed++;
-      samples.push({ external_id: p.external_id ?? "-", status: "db-error", error: updErr.message });
-      await supabaseAdmin.from("enrichments").insert({
-        point_id: p.id,
-        provider_id: PROVIDER_ID,
-        external_id: p.external_id,
-        status: "error",
-        error: `update: ${updErr.message}`,
-      });
-    } else {
-      succeeded++;
-      samples.push({ external_id: p.external_id ?? "-", status: "ok" });
-      await supabaseAdmin.from("enrichments").insert({
-        point_id: p.id,
-        provider_id: PROVIDER_ID,
-        external_id: p.external_id,
-        status: "ok",
-        error: null,
-      });
-    }
-  }
-
-  const { count: remaining } = await supabaseAdmin
-    .from("pickup_points")
-    .select("id", { count: "exact", head: true })
-    .eq("provider_id", PROVIDER_ID)
-    .is("hours_fetched_at", null);
-
-  return {
-    processed: points.length,
-    succeeded,
-    failed,
-    remaining: remaining ?? 0,
-    samples,
+  const finalize = async (patch: Record<string, unknown>) => {
+    if (!jobId) return;
+    await supabaseAdmin
+      .from("enrichment_jobs")
+      .update({ ...patch, finished_at: new Date().toISOString() })
+      .eq("id", jobId);
   };
+
+  try {
+    const { data: rows, error: selErr } = await supabaseAdmin
+      .from("pickup_points")
+      .select("id, external_id")
+      .eq("provider_id", PROVIDER_ID)
+      .is("hours_fetched_at", null)
+      .order("updated_at", { ascending: true })
+      .limit(batchSize);
+
+    if (selErr) {
+      await finalize({ status: "error", error: `select: ${selErr.message}` });
+      return {
+        jobId,
+        processed: 0,
+        succeeded: 0,
+        failed: 0,
+        remaining: 0,
+        samples: [{ external_id: "-", status: "select-error", error: selErr.message }],
+      };
+    }
+
+    const points = rows ?? [];
+    let succeeded = 0;
+    let failed = 0;
+
+    for (let i = 0; i < points.length; i++) {
+      if (i > 0) await jitter(2000, 5000);
+      const p = points[i];
+      const extId = (p.external_id ?? "").replace(/^vg-/, "");
+      if (!extId) {
+        failed++;
+        samples.push({ external_id: p.external_id ?? "-", status: "skip-no-ext-id" });
+        await supabaseAdmin.from("enrichments").insert({
+          point_id: p.id,
+          provider_id: PROVIDER_ID,
+          external_id: p.external_id,
+          status: "error",
+          error: "missing external_id",
+        });
+        continue;
+      }
+      const { hours, status, error } = await fetchVintedPointHours(extId);
+      if (!hours) {
+        failed++;
+        samples.push({ external_id: p.external_id ?? "-", status: `err-${status}`, error: error ?? undefined });
+        await supabaseAdmin.from("enrichments").insert({
+          point_id: p.id,
+          provider_id: PROVIDER_ID,
+          external_id: p.external_id,
+          status: "error",
+          error: `${status}: ${error ?? "no hours"}`.slice(0, 500),
+        });
+        continue;
+      }
+      const oh = rawHoursToOpeningHours(hours);
+      const { error: updErr } = await supabaseAdmin
+        .from("pickup_points")
+        .update({
+          opening_hours: oh,
+          hours_fetched_at: new Date().toISOString(),
+        })
+        .eq("id", p.id);
+      if (updErr) {
+        failed++;
+        samples.push({ external_id: p.external_id ?? "-", status: "db-error", error: updErr.message });
+        await supabaseAdmin.from("enrichments").insert({
+          point_id: p.id,
+          provider_id: PROVIDER_ID,
+          external_id: p.external_id,
+          status: "error",
+          error: `update: ${updErr.message}`,
+        });
+      } else {
+        succeeded++;
+        samples.push({ external_id: p.external_id ?? "-", status: "ok" });
+        await supabaseAdmin.from("enrichments").insert({
+          point_id: p.id,
+          provider_id: PROVIDER_ID,
+          external_id: p.external_id,
+          status: "ok",
+          error: null,
+        });
+      }
+    }
+
+    const { count: remaining } = await supabaseAdmin
+      .from("pickup_points")
+      .select("id", { count: "exact", head: true })
+      .eq("provider_id", PROVIDER_ID)
+      .is("hours_fetched_at", null);
+
+    await finalize({
+      status: "success",
+      processed: points.length,
+      succeeded,
+      failed,
+      remaining_after: remaining ?? 0,
+    });
+
+    return {
+      jobId,
+      processed: points.length,
+      succeeded,
+      failed,
+      remaining: remaining ?? 0,
+      samples,
+    };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    await finalize({ status: "error", error: msg.slice(0, 500) });
+    throw err;
+  }
 }
 
 export const enrichVintedGoBatch = createServerFn({ method: "POST" })
   .inputValidator((input) => z.object({ batchSize: z.number().min(1).max(20).optional() }).parse(input ?? {}))
   .handler(async ({ data }) => {
-    return enrichVintedGoBatchImpl(data.batchSize ?? 5);
+    return enrichVintedGoBatchImpl(data.batchSize ?? 5, "manual");
   });
 
+export const getVintedGoEnrichmentJobs = createServerFn({ method: "GET" }).handler(async () => {
+  const { data, error } = await supabaseAdmin
+    .from("enrichment_jobs")
+    .select("id, trigger, status, started_at, finished_at, batch_size, processed, succeeded, failed, remaining_after, error")
+    .eq("provider_id", PROVIDER_ID)
+    .order("started_at", { ascending: false })
+    .limit(50);
+  if (error) throw new Error(error.message);
+  return { jobs: data ?? [] };
+});
+
 export const getVintedGoStats = createServerFn({ method: "GET" }).handler(async () => {
-  const [totalRes, enrichedRes, lastOkRes, lastErrRes] = await Promise.all([
+  const [totalRes, enrichedRes, lastOkRes, lastErrRes, runningRes] = await Promise.all([
     supabaseAdmin
       .from("pickup_points")
       .select("id", { count: "exact", head: true })
@@ -421,12 +479,21 @@ export const getVintedGoStats = createServerFn({ method: "GET" }).handler(async 
       .order("created_at", { ascending: false })
       .limit(1)
       .maybeSingle(),
+    supabaseAdmin
+      .from("enrichment_jobs")
+      .select("id", { count: "exact", head: true })
+      .eq("provider_id", PROVIDER_ID)
+      .eq("status", "running"),
   ]);
 
+  const total = totalRes.count ?? 0;
+  const enriched = enrichedRes.count ?? 0;
+  const pending = total - enriched;
   return {
-    total: totalRes.count ?? 0,
-    enriched: enrichedRes.count ?? 0,
-    pending: (totalRes.count ?? 0) - (enrichedRes.count ?? 0),
+    total,
+    enriched,
+    pending,
+    inProgress: (runningRes.count ?? 0) > 0 || pending > 0,
     lastOk: lastOkRes.data,
     lastError: lastErrRes.data,
   };

@@ -41,6 +41,51 @@ export type Database = {
         }
         Relationships: []
       }
+      enrichment_jobs: {
+        Row: {
+          batch_size: number
+          error: string | null
+          failed: number
+          finished_at: string | null
+          id: string
+          processed: number
+          provider_id: string
+          remaining_after: number | null
+          started_at: string
+          status: string
+          succeeded: number
+          trigger: string
+        }
+        Insert: {
+          batch_size?: number
+          error?: string | null
+          failed?: number
+          finished_at?: string | null
+          id?: string
+          processed?: number
+          provider_id: string
+          remaining_after?: number | null
+          started_at?: string
+          status?: string
+          succeeded?: number
+          trigger?: string
+        }
+        Update: {
+          batch_size?: number
+          error?: string | null
+          failed?: number
+          finished_at?: string | null
+          id?: string
+          processed?: number
+          provider_id?: string
+          remaining_after?: number | null
+          started_at?: string
+          status?: string
+          succeeded?: number
+          trigger?: string
+        }
+        Relationships: []
+      }
       enrichments: {
         Row: {
           created_at: string

@@ -24,7 +24,7 @@ export const Route = createFileRoute("/api/public/hooks/enrich-vinted-go")({
           // empty body ok
         }
 
-        const result = await enrichVintedGoBatchImpl(batchSize);
+        const result = await enrichVintedGoBatchImpl(batchSize, "cron");
         return new Response(JSON.stringify(result), {
           status: 200,
           headers: { "Content-Type": "application/json" },

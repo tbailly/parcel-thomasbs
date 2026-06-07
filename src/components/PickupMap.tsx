@@ -313,6 +313,159 @@ export function PickupMap({ providers, points, config, homes }: Props) {
           );
         })}
       </div>
+
+      <PointSheet point={selected} provider={selected ? providerById[selected.provider_id] : undefined} onClose={() => setSelected(null)} />
     </div>
+  );
+}
+
+function PointSheet({ point, provider, onClose }: { point: PickupPoint | null; provider?: Provider; onClose: () => void }) {
+  const open = !!point && !!provider;
+  const todayKey = DAY_KEYS[new Date().getDay()];
+
+  if (!point || !provider) {
+    return (
+      <div
+        className="pointer-events-none fixed inset-x-0 bottom-0 z-[500] translate-y-full transition-transform duration-300"
+        aria-hidden
+      />
+    );
+  }
+
+  const c = provider.color;
+  const logo = getProviderLogo(provider);
+  const isFake = point.name.startsWith("Fake - ");
+  const cleanName = point.name.replace(/^Fake - /, "");
+  const gmapsUrl = `https://www.google.com/maps/dir/?api=1&destination=${point.lat},${point.lng}&destination_place_id=${encodeURIComponent(cleanName)}`;
+  const citymapperUrl = `https://citymapper.com/directions?endcoord=${point.lat},${point.lng}&endname=${encodeURIComponent(cleanName)}&endaddress=${encodeURIComponent(`${point.address}, ${point.postal_code} ${point.city}`)}`;
+
+  return (
+    <>
+      <div
+        className={`fixed inset-0 z-[490] bg-black/20 backdrop-blur-[1px] transition-opacity duration-200 ${open ? "opacity-100" : "pointer-events-none opacity-0"}`}
+        onClick={onClose}
+      />
+      <div
+        className={`fixed inset-x-0 bottom-0 z-[500] transition-transform duration-300 ${open ? "translate-y-0" : "translate-y-full"}`}
+        role="dialog"
+        aria-label={cleanName}
+      >
+        <div
+          className="relative mx-auto max-w-md overflow-hidden rounded-t-3xl border border-white/60 bg-white/85 shadow-2xl backdrop-blur-xl"
+          style={{
+            backgroundImage: `linear-gradient(180deg, ${c}14 0%, rgba(255,255,255,0.85) 55%, rgba(255,255,255,0.95) 100%)`,
+            boxShadow: `0 -8px 30px -8px ${c}55, 0 -2px 0 ${c}33`,
+          }}
+        >
+          <div className="pointer-events-none absolute inset-x-0 top-0 h-[2px]" style={{ background: `linear-gradient(90deg, transparent, ${c}, transparent)` }} />
+          <div className="flex justify-center pt-2">
+            <div className="h-1 w-10 rounded-full" style={{ background: `${c}55` }} />
+          </div>
+
+          <button
+            type="button"
+            onClick={onClose}
+            className="absolute right-3 top-3 flex h-7 w-7 items-center justify-center rounded-full bg-white/70 text-gray-600 shadow-sm transition hover:bg-white"
+            aria-label="Fermer"
+          >
+            <X size={14} />
+          </button>
+
+          <div className="px-4 pb-4 pt-2">
+            <div className="flex items-center gap-2">
+              <div
+                className="flex h-9 w-9 items-center justify-center rounded-full bg-white"
+                style={{ boxShadow: `0 0 0 1.5px ${c}88, 0 0 10px ${c}55` }}
+              >
+                <img src={logo} alt="" width={22} height={22} className="rounded-full object-cover" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-[11px] font-semibold uppercase tracking-wider" style={{ color: c }}>
+                  {provider.name}
+                </div>
+                <div className="truncate text-[15px] font-semibold text-gray-900">{cleanName}</div>
+              </div>
+              {isFake && (
+                <span className="rounded-md bg-amber-100 px-1.5 py-0.5 text-[10px] font-semibold text-amber-800">DEMO</span>
+              )}
+            </div>
+
+            <div className="mt-1.5 text-[12px] leading-snug text-gray-600">
+              {point.address}
+              <br />
+              {point.postal_code} {point.city}
+            </div>
+
+            <div
+              className="mt-3 rounded-xl border border-white/70 bg-white/60 p-2.5 backdrop-blur-md"
+              style={{ boxShadow: `inset 0 0 0 1px ${c}22` }}
+            >
+              <div className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-500">Horaires</div>
+              <ul className="grid grid-cols-1 gap-y-0.5">
+                {DAYS.map(({ key, label }) => {
+                  const isToday = key === todayKey;
+                  return (
+                    <li
+                      key={key}
+                      className="flex items-baseline justify-between text-[12px]"
+                      style={isToday ? { color: c, fontWeight: 600 } : undefined}
+                    >
+                      <span className="tabular-nums">{label}{isToday ? " · auj." : ""}</span>
+                      <span className="text-right">{formatHours(point.opening_hours[key])}</span>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+
+            {point.notes && (
+              <div className="mt-2 rounded-lg bg-gray-100/80 px-2.5 py-1.5 text-[11px] text-gray-700">{point.notes}</div>
+            )}
+
+            <div className="mt-3 grid grid-cols-2 gap-2">
+              <a
+                href={gmapsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center gap-1.5 rounded-xl border border-white/60 bg-white/80 py-2 text-[13px] font-medium text-gray-800 shadow-sm backdrop-blur transition hover:bg-white"
+                style={{ boxShadow: `0 0 0 1px ${c}22, 0 4px 12px -6px ${c}44` }}
+              >
+                <GoogleMapsIcon />
+                Google Maps
+              </a>
+              <a
+                href={citymapperUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center justify-center gap-1.5 rounded-xl border border-white/60 bg-white/80 py-2 text-[13px] font-medium text-gray-800 shadow-sm backdrop-blur transition hover:bg-white"
+                style={{ boxShadow: `0 0 0 1px ${c}22, 0 4px 12px -6px ${c}44` }}
+              >
+                <CitymapperIcon />
+                Citymapper
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+    </>
+  );
+}
+
+function GoogleMapsIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden>
+      <path d="M12 2C7.6 2 4 5.6 4 10c0 5.6 8 12 8 12s8-6.4 8-12c0-4.4-3.6-8-8-8z" fill="#EA4335" />
+      <circle cx="12" cy="10" r="3" fill="#fff" />
+    </svg>
+  );
+}
+
+function CitymapperIcon() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden>
+      <rect x="2" y="2" width="20" height="20" rx="5" fill="#0099D5" />
+      <path d="M7 12c0-2.8 2.2-5 5-5 1.7 0 3.2.8 4.1 2.1l-1.7 1.2A3 3 0 0 0 9 12a3 3 0 0 0 5.4 1.7l1.7 1.2A5 5 0 0 1 7 12z" fill="#fff" />
+      <circle cx="16.5" cy="7.5" r="1.5" fill="#FFD400" />
+    </svg>
   );
 }

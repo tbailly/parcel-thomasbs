@@ -181,6 +181,7 @@ export function PickupMap({ providers, points, config, homes }: Props) {
   const [enabled, setEnabled] = useState<Record<string, boolean>>(
     () => Object.fromEntries(providers.map((p) => [p.id, true])),
   );
+  const [selected, setSelected] = useState<PickupPoint | null>(null);
 
   const providerById = useMemo(
     () => Object.fromEntries(providers.map((p) => [p.id, p])),

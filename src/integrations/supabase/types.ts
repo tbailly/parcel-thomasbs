@@ -69,7 +69,22 @@ export type Database = {
           provider_id?: string
           status?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "enrichments_point_id_fkey"
+            columns: ["point_id"]
+            isOneToOne: false
+            referencedRelation: "latest_pickup_points"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "enrichments_point_id_fkey"
+            columns: ["point_id"]
+            isOneToOne: false
+            referencedRelation: "pickup_points"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       home_addresses: {
         Row: {
@@ -162,6 +177,13 @@ export type Database = {
             columns: ["provider_id"]
             isOneToOne: false
             referencedRelation: "providers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pickup_points_query_id_fkey"
+            columns: ["query_id"]
+            isOneToOne: false
+            referencedRelation: "queries"
             referencedColumns: ["id"]
           },
         ]
@@ -262,6 +284,13 @@ export type Database = {
             columns: ["provider_id"]
             isOneToOne: false
             referencedRelation: "providers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "pickup_points_query_id_fkey"
+            columns: ["query_id"]
+            isOneToOne: false
+            referencedRelation: "queries"
             referencedColumns: ["id"]
           },
         ]

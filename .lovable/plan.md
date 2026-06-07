@@ -1,53 +1,44 @@
-## Contexte
+# Carte : agrégats, pins maison, couleurs de marque
 
-Le pin actuel est une goutte d'eau (teardrop) avec un disque blanc contenant le logo du provider, ancré par sa pointe sur la coordonnée. Tu veux passer à :
-- **Forme** : losange (diamond) travaillé, pas une simple rotation de carré
-- **Centre** : le pin est centré sur la coordonnée (plus de pointe vers le bas)
-- **Esthétique** : futuriste, contour glowy, touche légère de couleur provider
+## 1. Agrégats — chiffre blanc, pas de disque
 
-## Stratégie
+Dans `buildClusterDiamond` (`src/components/PickupMap.tsx`) :
+- Supprimer le `<circle cx="28" cy="26" r="13" ...>` blanc au centre.
+- Garder les dots colorés des providers présents (un par provider, gris profond par défaut sur le contour).
+- Recentrer le `<text>` du compte (actuellement à `y="30"`) vers `y="30"` mais en `fill="#ffffff"`, `font-weight="700"`, taille ~15 et avec un léger `text-shadow` via `paint-order:stroke` + `stroke="rgba(0,0,0,0.35)"` `stroke-width="2.5"` pour rester lisible sur n'importe quelle teinte de losange.
+- Déplacer la ligne de dots juste sous le chiffre (vers `cy="42"`) pour qu'elle reste visible.
 
-Je vais implémenter **3 variantes en parallèle**, sélectionnables via un sélecteur discret (segmented control) en haut à gauche de la carte, pour qu'on puisse comparer en live sur le vrai dataset avant de figer un style. Chaque variante est un SVG `L.divIcon`, ancré au centre (`iconAnchor: [size/2, size/2]`), avec le glow rendu via `<filter>` SVG (pas CSS, pour rester net dans les clusters Leaflet).
+## 2. Pin "Maison" par adresse
 
-### Variante A — « Holo Diamond »
-- Losange à 4 facettes (faces gauche/droite avec dégradés clair→sombre) pour effet 3D taillé
-- Contour 1.5px en `provider.color` + halo externe (filter `feGaussianBlur` r=3) de la même couleur à 60% opacité
-- Cœur : disque blanc cassé `#f8fafc` contenant le logo
-- Mini chevrons aux 4 pointes pour le côté HUD/sci-fi
-- Touche couleur : facettes teintées à 8-12% de `provider.color`
+Le backend a déjà une table `home_addresses` (2 entrées : "Maison" 93400, "Vibe" 75009) — actuellement on n'affiche qu'un seul `circleMarker` pour `app_config.center_address`.
 
-### Variante B — « Neon Crystal »
-- Losange creux (juste le contour 2px) en `provider.color` saturé
-- Double halo : un interne diffus (couleur provider, 40%) + un externe (blanc, 60%) → effet néon
-- Cœur logo en disque sombre `#0f172a` translucide (85%) avec le logo en blanc/contour
-- Hyper lisible sur fond beige clair, très "futuriste minimal"
-- Touche couleur : forte sur le contour, neutre partout ailleurs
+- Étendre `getMapData` (`src/lib/pickup-points.functions.ts`) pour retourner aussi `homes: { id, name, lat, lng }[]` lu depuis `home_addresses` (ordre `position, created_at`).
+- Dans `PickupMap` : remplacer le `circleMarker` unique par une boucle sur `homes`. Chaque pin = `L.divIcon` losange vert (même langage visuel que les pins relais Holo, taille ~44px), avec :
+  - couleur verte vive (ex. `#16A34A` — token Tailwind `green-600` adapté au thème beige clair),
+  - icône maison SVG (path Lucide `home`) en blanc au centre, plus de logo provider,
+  - tooltip avec le `name` de l'adresse.
+- Les pins maison vont sur une `L.layerGroup` séparée, ajoutée directement à la carte (hors cluster) pour qu'ils restent toujours visibles et ne soient pas agrégés avec les points relais.
 
-### Variante C — « Glass Prism »
-- Losange en glassmorphism : fond `rgba(255,255,255,0.55)` + `backdrop-filter` (via filter SVG approximé) + bordure 1px blanche
-- Reflet diagonal (gradient `white→transparent` à 45°) sur la moitié haute
-- Liseré fin (1px) `provider.color` autour du losange
-- Petite pastille circulaire en bas-droite avec la couleur provider pure (genre LED de statut)
-- Logo centré sur fond transparent → on voit la carte derrière en filigrane
+## 3. Couleurs de marque providers
 
-## Détails techniques
+Migration SQL pour mettre à jour `providers.color` avec les hex officiels actuels des chartes (`Chronopost` et `Vinted Go` restent proches — assumé par l'utilisateur) :
 
-- **Taille** : 40×40 px (vs 40×52 actuel). Anchor `[20, 20]`, popup anchor `[0, -22]`.
-- **Glow** : `<filter id="glow-X"><feGaussianBlur stdDeviation="2.5"/><feMerge>…</feMerge></filter>` dans chaque SVG. ID suffixé par `provider.id` + variant pour éviter les collisions DOM dans le cluster.
-- **Sélecteur de style** : petit overlay flottant `absolute left-3 top-3` (3 boutons A/B/C), state local dans `PickupMap`. Passé à `makeIcon(provider, variant)`. Persistance via `localStorage` pour qu'on garde la sélection entre reloads pendant l'itération.
-- **Marqueur central** (adresse maison) : on garde le `circleMarker` actuel, indépendant.
+| Provider | Actuel | Proposé | Source |
+|---|---|---|---|
+| Mondial Relay | `#E2001A` | `#E2001A` | inchangé (déjà la rouge officielle de la charte) |
+| Chronopost | `#00925A` | `#00A04B` | vert chronopost.com (logo + header actuels) |
+| Vinted Go | `#09B1BA` | `#09B1BA` | inchangé (teal Vinted Go) |
+
+Si tu veux des hex différents (par ex. le `#007782` Vinted historique au lieu du teal Vinted Go), dis-le moi avant qu'on lance la migration.
 
 ## Fichiers touchés
 
-- `src/components/PickupMap.tsx` :
-  - `makeIcon(provider, variant)` avec switch sur 3 builders SVG (`buildHoloDiamond`, `buildNeonCrystal`, `buildGlassPrism`)
-  - Ajout state `variant`, overlay sélecteur, dépendance dans le `useEffect` qui repeuple le cluster
-- **Aucune** modif backend, tuiles, ou schéma.
+- `src/components/PickupMap.tsx` — cluster SVG, pin maison, layer homes.
+- `src/lib/pickup-points.functions.ts` — ajout `homes` dans `getMapData`.
+- `src/routes/index.tsx` — passage de `homes` à `<PickupMap />` si la prop est typée.
+- Migration SQL — `UPDATE providers SET color = ... WHERE id IN ('chronopost')`.
 
-## Comment on itère après ce premier jet
+## Hors scope
 
-Tu testes les 3 sur la carte réelle. Tu me dis laquelle tu préfères (ou laquelle hybrider). Je supprime le sélecteur et je garde la finale, ou j'ajuste (taille du glow, intensité couleur, épaisseur contour, etc.).
-
-## Question
-
-Tu veux qu'on garde le logo du provider visible au centre dans toutes les variantes (comme aujourd'hui), ou tu préfères qu'au moins une variante remplace le logo par juste une initiale / un point coloré pour un rendu encore plus "abstrait futuriste" ?
+- Pas de changement sur les pins providers (style Holo conservé tel quel).
+- Pas de UI pour gérer les `home_addresses` (la table existe déjà avec ses entrées).

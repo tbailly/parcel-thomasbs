@@ -4,14 +4,16 @@ import "leaflet/dist/leaflet.css";
 import "leaflet.markercluster";
 import "leaflet.markercluster/dist/MarkerCluster.css";
 import "leaflet.markercluster/dist/MarkerCluster.Default.css";
-import type { AppConfig, OpeningHours, PickupPoint, Provider } from "@/lib/pickup-points.functions";
+import type { AppConfig, HomeAddress, OpeningHours, PickupPoint, Provider } from "@/lib/pickup-points.functions";
 import { getProviderLogo } from "@/lib/provider-logos";
 
 type Props = {
   providers: Provider[];
   points: PickupPoint[];
   config: AppConfig;
+  homes: HomeAddress[];
 };
+
 
 const DAYS: { key: keyof OpeningHours; label: string }[] = [
   { key: "mon", label: "Lundi" },
@@ -110,13 +112,13 @@ function makeIcon(provider: Provider): L.DivIcon {
 }
 
 function buildClusterDiamond(count: number, providerColors: string[], uid: string): string {
-  // Dots: one per provider present (any count), aligned horizontally inside the diamond's center disc.
+  // Dots: one per provider present (any count), positioned under the count number.
   const dotR = 2.6;
   const gap = 7;
   const total = providerColors.length;
   const startX = 28 - ((total - 1) * gap) / 2;
   const dots = providerColors
-    .map((c, i) => `<circle cx="${startX + i * gap}" cy="38" r="${dotR}" fill="${c}" stroke="#ffffff" stroke-width="0.7"/>`)
+    .map((c, i) => `<circle cx="${startX + i * gap}" cy="42" r="${dotR}" fill="${c}" stroke="#ffffff" stroke-width="0.7"/>`)
     .join("");
 
   return `
@@ -136,24 +138,73 @@ function buildClusterDiamond(count: number, providerColors: string[], uid: strin
         </filter>
       </defs>
       <g filter="url(#cl-f-${uid})">
-        <path d="M28 4 L52 28 L28 52 L4 28 Z" fill="${DEFAULT_DOT_COLOR}" opacity="0.35"/>
+        <path d="M28 4 L52 28 L28 52 L4 28 Z" fill="${DEFAULT_DOT_COLOR}" opacity="0.55"/>
       </g>
-      <path d="M28 4 L28 52 L4 28 Z" fill="url(#cl-l-${uid})"/>
-      <path d="M28 4 L52 28 L28 52 Z" fill="url(#cl-r-${uid})"/>
-      <path d="M28 4 L52 28 L28 52 L4 28 Z" fill="none" stroke="${DEFAULT_DOT_COLOR}" stroke-width="1.6" stroke-linejoin="round"/>
-      <circle cx="28" cy="26" r="13" fill="#fafafa" stroke="${DEFAULT_DOT_COLOR}" stroke-width="0.8" stroke-opacity="0.45"/>
-      <text x="28" y="30" text-anchor="middle" font-family="ui-sans-serif,system-ui,sans-serif" font-size="13" font-weight="700" fill="#111827">${count}</text>
+      <path d="M28 4 L52 28 L28 52 L4 28 Z" fill="${DEFAULT_DOT_COLOR}" fill-opacity="0.85"/>
+      <path d="M28 4 L52 28 L28 52 L4 28 Z" fill="none" stroke="#ffffff" stroke-width="1.4" stroke-linejoin="round" stroke-opacity="0.85"/>
+      <text x="28" y="32" text-anchor="middle" font-family="ui-sans-serif,system-ui,sans-serif" font-size="15" font-weight="700" fill="#ffffff" stroke="rgba(0,0,0,0.35)" stroke-width="2.5" paint-order="stroke">${count}</text>
       ${dots}
-      <path d="M28 2 L30 4 L26 4 Z M54 28 L52 30 L52 26 Z M28 54 L26 52 L30 52 Z M2 28 L4 26 L4 30 Z" fill="${DEFAULT_DOT_COLOR}" opacity="0.75"/>
+      <path d="M28 2 L30 4 L26 4 Z M54 28 L52 30 L52 26 Z M28 54 L26 52 L30 52 Z M2 28 L4 26 L4 30 Z" fill="${DEFAULT_DOT_COLOR}" opacity="0.85"/>
     </svg>`;
 }
 
+const HOME_COLOR = "#16A34A";
+const HOME_SIZE = 44;
+
+function buildHomeDiamond(uid: string): string {
+  const c = HOME_COLOR;
+  return `
+    <svg width="${HOME_SIZE}" height="${HOME_SIZE}" viewBox="0 0 44 44" xmlns="http://www.w3.org/2000/svg" style="display:block;overflow:visible">
+      <defs>
+        <linearGradient id="hm-l-${uid}" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#ffffff" stop-opacity="0.55"/>
+          <stop offset="1" stop-color="${c}" stop-opacity="0.85"/>
+        </linearGradient>
+        <linearGradient id="hm-r-${uid}" x1="1" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#ffffff" stop-opacity="0.35"/>
+          <stop offset="1" stop-color="${c}"/>
+        </linearGradient>
+        <filter id="hm-f-${uid}" x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation="2.4" result="b"/>
+          <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+        </filter>
+      </defs>
+      <g filter="url(#hm-f-${uid})">
+        <path d="M22 4 L40 22 L22 40 L4 22 Z" fill="${c}" opacity="0.45"/>
+      </g>
+      <path d="M22 4 L22 40 L4 22 Z" fill="url(#hm-l-${uid})"/>
+      <path d="M22 4 L40 22 L22 40 Z" fill="url(#hm-r-${uid})"/>
+      <path d="M22 4 L40 22 L22 40 L4 22 Z" fill="none" stroke="#ffffff" stroke-width="1.3" stroke-linejoin="round" stroke-opacity="0.9"/>
+      <path d="M22 4 L40 22 L22 40 L4 22 Z" fill="none" stroke="${c}" stroke-width="0.8" stroke-linejoin="round" opacity="0.6"/>
+      <g transform="translate(13 13)" fill="none" stroke="#ffffff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M2 8 L9 2 L16 8 L16 16 L2 16 Z"/>
+        <path d="M7 16 L7 11 L11 11 L11 16"/>
+      </g>
+      <path d="M22 2 L24 4 L20 4 Z M42 22 L40 24 L40 20 Z M22 42 L20 40 L24 40 Z M2 22 L4 20 L4 24 Z" fill="${c}" opacity="0.85"/>
+    </svg>`;
+}
+
+let homeUidCounter = 0;
+function makeHomeIcon(): L.DivIcon {
+  const uid = `home-${++homeUidCounter}`;
+  return L.divIcon({
+    className: "pudo-home",
+    html: `<div style="filter:drop-shadow(0 2px 4px rgba(0,0,0,0.28))">${buildHomeDiamond(uid)}</div>`,
+    iconSize: [HOME_SIZE, HOME_SIZE],
+    iconAnchor: [HOME_SIZE / 2, HOME_SIZE / 2],
+    popupAnchor: [0, -HOME_SIZE / 2 + 2],
+  });
+}
+
+
+
 let clusterUidCounter = 0;
 
-export function PickupMap({ providers, points, config }: Props) {
+export function PickupMap({ providers, points, config, homes }: Props) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<L.Map | null>(null);
   const clusterRef = useRef<L.MarkerClusterGroup | null>(null);
+  const homesLayerRef = useRef<L.LayerGroup | null>(null);
   const [enabled, setEnabled] = useState<Record<string, boolean>>(
     () => Object.fromEntries(providers.map((p) => [p.id, true])),
   );
@@ -177,17 +228,6 @@ export function PickupMap({ providers, points, config }: Props) {
       maxZoom: 20,
       className: "pudo-tiles-beige",
     }).addTo(map);
-
-    // Center marker
-    L.circleMarker([config.center_lat, config.center_lng], {
-      radius: 6,
-      color: "#1f2937",
-      fillColor: "#1f2937",
-      fillOpacity: 0.9,
-      weight: 2,
-    })
-      .bindTooltip(config.center_address, { direction: "top" })
-      .addTo(map);
 
     const cluster = L.markerClusterGroup({
       showCoverageOnHover: false,
@@ -213,15 +253,33 @@ export function PickupMap({ providers, points, config }: Props) {
       },
     });
     map.addLayer(cluster);
+
+    // Homes layer (not clustered, always visible above tiles)
+    const homesLayer = L.layerGroup().addTo(map);
+
     mapRef.current = map;
     clusterRef.current = cluster;
+    homesLayerRef.current = homesLayer;
 
     return () => {
       map.remove();
       mapRef.current = null;
       clusterRef.current = null;
+      homesLayerRef.current = null;
     };
-  }, [config.center_lat, config.center_lng, config.center_address, config.default_zoom]);
+  }, [config.center_lat, config.center_lng, config.default_zoom]);
+
+  // Sync home pins
+  useEffect(() => {
+    const layer = homesLayerRef.current;
+    if (!layer) return;
+    layer.clearLayers();
+    for (const home of homes) {
+      L.marker([home.lat, home.lng], { icon: makeHomeIcon(), zIndexOffset: 1000 })
+        .bindTooltip(home.name, { direction: "top", offset: [0, -HOME_SIZE / 2 + 4] })
+        .addTo(layer);
+    }
+  }, [homes]);
 
   // Sync markers when filters change
   useEffect(() => {
@@ -244,6 +302,8 @@ export function PickupMap({ providers, points, config }: Props) {
     }
     cluster.addLayers(markers);
   }, [points, enabled, providerById]);
+
+
 
   return (
     <div className="relative h-screen w-screen">

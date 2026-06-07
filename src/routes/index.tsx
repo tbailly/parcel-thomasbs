@@ -1,10 +1,7 @@
-import { createFileRoute, useRouter } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { queryOptions, useSuspenseQuery } from "@tanstack/react-query";
-import { lazy, Suspense, useState } from "react";
-import { useServerFn } from "@tanstack/react-start";
+import { lazy, Suspense } from "react";
 import { getMapData } from "@/lib/pickup-points.functions";
-import { scrapeMondialRelay, scrapeMondialRelayDebug93400 } from "@/lib/mondial-relay.functions";
-
 
 const PickupMap = lazy(() =>
   import("@/components/PickupMap").then((m) => ({ default: m.PickupMap })),
@@ -52,83 +49,17 @@ export const Route = createFileRoute("/")({
 });
 
 function Index() {
-  const router = useRouter();
   const { data } = useSuspenseQuery(mapDataQueryOptions);
-  const scrape = useServerFn(scrapeMondialRelay);
-  const scrapeDebug = useServerFn(scrapeMondialRelayDebug93400);
-  const [loading, setLoading] = useState(false);
-  const [debugLoading, setDebugLoading] = useState(false);
-  const [result, setResult] = useState<unknown>(null);
-  const [err, setErr] = useState<string | null>(null);
-
-  const run = async () => {
-    setLoading(true);
-    setErr(null);
-    setResult(null);
-    try {
-      const res = await scrape({ data: {} });
-      setResult(res);
-      router.invalidate();
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e));
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const runDebug = async () => {
-    setDebugLoading(true);
-    setErr(null);
-    setResult(null);
-    try {
-      const res = await scrapeDebug({ data: {} });
-      setResult(res);
-      router.invalidate();
-    } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e));
-    } finally {
-      setDebugLoading(false);
-    }
-  };
 
   return (
-    <>
-      <Suspense
-        fallback={
-          <div className="flex h-screen w-screen items-center justify-center text-sm text-muted-foreground">
-            Chargement de la carte…
-          </div>
-        }
-      >
-        <PickupMap providers={data.providers} points={data.points} config={data.config} />
-      </Suspense>
-
-      <div className="fixed bottom-4 right-4 z-[1000] flex max-w-md flex-col gap-2">
-        <button
-          onClick={run}
-          disabled={loading}
-          className="self-end rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground shadow-lg disabled:opacity-60"
-        >
-          {loading ? "Import en cours…" : "Importer Mondial Relay (adresse maison)"}
-        </button>
-        <button
-          onClick={runDebug}
-          disabled={debugLoading}
-          className="self-end rounded-md bg-secondary px-4 py-2 text-sm font-medium text-secondary-foreground shadow-lg disabled:opacity-60"
-        >
-          {debugLoading ? "Test 93400 en cours…" : "Test 93400 simple (sans actions)"}
-        </button>
-        {err && (
-          <pre className="max-h-72 overflow-auto rounded-md bg-destructive p-3 text-xs text-destructive-foreground shadow-lg">
-            {err}
-          </pre>
-        )}
-        {result != null && (
-          <pre className="max-h-96 overflow-auto rounded-md bg-card p-3 text-xs text-card-foreground shadow-lg ring-1 ring-border">
-            {JSON.stringify(result, null, 2)}
-          </pre>
-        )}
-      </div>
-    </>
+    <Suspense
+      fallback={
+        <div className="flex h-screen w-screen items-center justify-center text-sm text-muted-foreground">
+          Chargement de la carte…
+        </div>
+      }
+    >
+      <PickupMap providers={data.providers} points={data.points} config={data.config} />
+    </Suspense>
   );
 }

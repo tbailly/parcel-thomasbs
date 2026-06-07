@@ -180,10 +180,6 @@ export function PickupMap({ providers, points, config }: Props) {
         </ul>
       </div>
 
-      {/* Badge bas-gauche */}
-      <div className="absolute bottom-3 left-3 z-[400] rounded-lg bg-white/95 px-3 py-1.5 text-xs text-gray-700 shadow-md backdrop-blur">
-        Données de démo · 75 / 92 / 93
-      </div>
     </div>
   );
 }

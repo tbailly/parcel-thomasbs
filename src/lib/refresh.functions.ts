@@ -3,7 +3,9 @@ import { z } from "zod";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { requireAdmin } from "./admin-auth.functions";
 
-export const getRefreshProviders = createServerFn({ method: "GET" }).handler(
+export const getRefreshProviders = createServerFn({ method: "GET" })
+  .middleware([requireAdmin])
+  .handler(
   async () => {
     const { data, error } = await supabaseAdmin
       .from("providers")

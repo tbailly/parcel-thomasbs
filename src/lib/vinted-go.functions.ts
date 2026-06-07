@@ -477,7 +477,9 @@ export const enrichVintedGoBatch = createServerFn({ method: "POST" })
     return enrichVintedGoBatchImpl(data.batchSize ?? 5, "manual");
   });
 
-export const getVintedGoEnrichmentJobs = createServerFn({ method: "GET" }).handler(async () => {
+export const getVintedGoEnrichmentJobs = createServerFn({ method: "GET" })
+  .middleware([requireAdmin])
+  .handler(async () => {
   const { data, error } = await supabaseAdmin
     .from("enrichment_jobs")
     .select("id, trigger, status, started_at, finished_at, batch_size, processed, succeeded, failed, remaining_after, error")
@@ -488,7 +490,9 @@ export const getVintedGoEnrichmentJobs = createServerFn({ method: "GET" }).handl
   return { jobs: data ?? [] };
 });
 
-export const getVintedGoStats = createServerFn({ method: "GET" }).handler(async () => {
+export const getVintedGoStats = createServerFn({ method: "GET" })
+  .middleware([requireAdmin])
+  .handler(async () => {
   const { data: latestQuery } = await supabaseAdmin
     .from("queries")
     .select("id")

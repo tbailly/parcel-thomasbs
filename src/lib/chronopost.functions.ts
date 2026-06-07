@@ -337,7 +337,9 @@ export const refreshChronopost = createServerFn({ method: "POST" })
     };
   });
 
-export const getChronopostStats = createServerFn({ method: "GET" }).handler(async () => {
+export const getChronopostStats = createServerFn({ method: "GET" })
+  .middleware([requireAdmin])
+  .handler(async () => {
   const [{ count: total }, { data: lastQueries }] = await Promise.all([
     supabaseAdmin
       .from("pickup_points")

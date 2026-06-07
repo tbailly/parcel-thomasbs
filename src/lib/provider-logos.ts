@@ -1,6 +1,6 @@
 import mondialRelay from "@/assets/providers/mondial-relay.png";
 import chronopost from "@/assets/providers/chronopost.svg";
-import vintedGo from "@/assets/providers/vinted-go.svg";
+import vintedGo from "@/assets/providers/vinted-go.png";
 import shop2shop from "@/assets/providers/shop2shop.svg";
 
 // Keyed by provider.id (db slug)

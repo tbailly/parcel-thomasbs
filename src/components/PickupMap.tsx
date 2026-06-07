@@ -193,8 +193,10 @@ export function PickupMap({ providers, points, config, homes }: Props) {
   // Init map once
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
+    const centerLat = homes.length > 0 ? homes[0].lat : config.center_lat;
+    const centerLng = homes.length > 0 ? homes[0].lng : config.center_lng;
     const map = L.map(containerRef.current, {
-      center: [config.center_lat, config.center_lng],
+      center: [centerLat, centerLng],
       zoom: config.default_zoom,
       zoomControl: true,
     });

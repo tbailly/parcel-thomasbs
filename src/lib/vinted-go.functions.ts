@@ -441,7 +441,9 @@ export async function enrichVintedGoBatchImpl(
       .from("pickup_points")
       .select("id", { count: "exact", head: true })
       .eq("provider_id", PROVIDER_ID)
+      .eq("query_id", scopedQueryId)
       .is("hours_fetched_at", null);
+
 
     await finalize({
       status: "success",

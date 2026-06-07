@@ -13,7 +13,9 @@ export type ProviderOverview = {
   last_query_inserted: number | null;
 };
 
-export const getDashboardOverview = createServerFn({ method: "GET" }).handler(
+export const getDashboardOverview = createServerFn({ method: "GET" })
+  .middleware([requireAdmin])
+  .handler(
   async (): Promise<{ providers: ProviderOverview[] }> => {
     const { data: providers, error: pErr } = await supabaseAdmin
       .from("providers")
@@ -72,6 +74,7 @@ function isEmptyHours(v: unknown): boolean {
 }
 
 export const getProviderQueries = createServerFn({ method: "GET" })
+  .middleware([requireAdmin])
   .inputValidator((i) => z.object({ provider_id: z.string().min(1).max(100) }).parse(i))
   .handler(async ({ data }): Promise<{ queries: ProviderQuery[] }> => {
     const { data: qs, error } = await supabaseAdmin
@@ -132,6 +135,7 @@ export type QueryPoint = {
 };
 
 export const getQueryPoints = createServerFn({ method: "GET" })
+  .middleware([requireAdmin])
   .inputValidator((i) => z.object({ query_id: z.string().uuid() }).parse(i))
   .handler(async ({ data }): Promise<{ points: QueryPoint[] }> => {
     const { data: pts, error } = await supabaseAdmin

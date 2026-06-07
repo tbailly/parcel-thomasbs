@@ -2,6 +2,7 @@ import { createServerFn } from "@tanstack/react-start";
 import { z } from "zod";
 import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import type { OpeningHours } from "@/lib/pickup-points.functions";
+import { requireAdmin } from "./admin-auth.functions";
 
 const PROVIDER_ID = "vinted_go";
 
@@ -192,6 +193,7 @@ function buildTilesAroundHomes(
 // =================== Server fns ===================
 
 export const refreshVintedGoList = createServerFn({ method: "POST" })
+  .middleware([requireAdmin])
   .inputValidator((input) => z.object({}).parse(input ?? {}))
   .handler(async () => {
     const startedAt = new Date().toISOString();
@@ -469,6 +471,7 @@ export async function enrichVintedGoBatchImpl(
 }
 
 export const enrichVintedGoBatch = createServerFn({ method: "POST" })
+  .middleware([requireAdmin])
   .inputValidator((input) => z.object({ batchSize: z.number().min(1).max(20).optional() }).parse(input ?? {}))
   .handler(async ({ data }) => {
     return enrichVintedGoBatchImpl(data.batchSize ?? 5, "manual");

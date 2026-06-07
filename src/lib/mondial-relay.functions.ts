@@ -3,6 +3,7 @@ import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { z } from "zod";
 import Firecrawl from "@mendable/firecrawl-js";
 import { backgroundTask } from "./cf-ctx";
+import { requireAdmin } from "./admin-auth.functions";
 
 type DayKey = "mon" | "tue" | "wed" | "thu" | "fri" | "sat" | "sun";
 type OpeningSlot = { open: string; close: string };
@@ -275,6 +276,7 @@ async function runScrapeJob(queryId: string, homes: HomeRow[]) {
 }
 
 export const scrapeMondialRelayDebug93400 = createServerFn({ method: "POST" })
+  .middleware([requireAdmin])
   .inputValidator((input) => z.object({}).parse(input ?? {}))
   .handler(async () => {
     const startedAt = new Date().toISOString();
@@ -388,6 +390,7 @@ export const scrapeMondialRelayDebug93400 = createServerFn({ method: "POST" })
   });
 
 export const scrapeMondialRelay = createServerFn({ method: "POST" })
+  .middleware([requireAdmin])
   .inputValidator((input) => z.object({}).parse(input ?? {}))
   .handler(async () => {
     const startedAt = new Date().toISOString();

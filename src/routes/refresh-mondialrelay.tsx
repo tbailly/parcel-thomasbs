@@ -12,7 +12,7 @@ const refreshProvidersQueryOptions = queryOptions({
   queryFn: () => getRefreshProviders(),
 });
 
-export const Route = createFileRoute("/refresh")({
+export const Route = createFileRoute("/refresh-mondialrelay")({
   head: () => ({
     meta: [
       { title: "Refresh points relais" },

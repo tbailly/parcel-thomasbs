@@ -271,7 +271,7 @@ export function PickupMap({ providers, points, config, homes }: Props) {
         providerId: provider.id,
         providerColor: provider.color,
       } as L.MarkerOptions & { providerId: string; providerColor: string });
-      marker.bindPopup(buildPopupHtml(point, provider), { maxWidth: 320 });
+      marker.on("click", () => setSelected(point));
       markers.push(marker);
     }
     cluster.addLayers(markers);

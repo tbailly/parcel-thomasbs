@@ -299,8 +299,8 @@ export const refreshChronopost = createServerFn({ method: "POST" })
           city: p.city ?? "",
           lat,
           lng,
-          opening_hours: parseOpeningHours(p.listopeninghours),
-          notes: typeLabel,
+          opening_hours: opening,
+          notes: TYPE_LABEL[type],
           hours_fetched_at: new Date().toISOString(),
           query_id: queryId,
         };

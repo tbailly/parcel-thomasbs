@@ -4,14 +4,16 @@ import "leaflet/dist/leaflet.css";
 import "leaflet.markercluster";
 import "leaflet.markercluster/dist/MarkerCluster.css";
 import "leaflet.markercluster/dist/MarkerCluster.Default.css";
-import type { AppConfig, OpeningHours, PickupPoint, Provider } from "@/lib/pickup-points.functions";
+import type { AppConfig, HomeAddress, OpeningHours, PickupPoint, Provider } from "@/lib/pickup-points.functions";
 import { getProviderLogo } from "@/lib/provider-logos";
 
 type Props = {
   providers: Provider[];
   points: PickupPoint[];
   config: AppConfig;
+  homes: HomeAddress[];
 };
+
 
 const DAYS: { key: keyof OpeningHours; label: string }[] = [
   { key: "mon", label: "Lundi" },

@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as RefreshVintedRouteImport } from './routes/refresh-vinted'
 import { Route as RefreshMondialrelayRouteImport } from './routes/refresh-mondialrelay'
+import { Route as RefreshChronopostRouteImport } from './routes/refresh-chronopost'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ApiPublicRefreshPudosRouteImport } from './routes/api/public/refresh-pudos'
@@ -24,6 +25,11 @@ const RefreshVintedRoute = RefreshVintedRouteImport.update({
 const RefreshMondialrelayRoute = RefreshMondialrelayRouteImport.update({
   id: '/refresh-mondialrelay',
   path: '/refresh-mondialrelay',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const RefreshChronopostRoute = RefreshChronopostRouteImport.update({
+  id: '/refresh-chronopost',
+  path: '/refresh-chronopost',
   getParentRoute: () => rootRouteImport,
 } as any)
 const DashboardRoute = DashboardRouteImport.update({
@@ -51,6 +57,7 @@ const ApiPublicHooksEnrichVintedGoRoute =
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRoute
+  '/refresh-chronopost': typeof RefreshChronopostRoute
   '/refresh-mondialrelay': typeof RefreshMondialrelayRoute
   '/refresh-vinted': typeof RefreshVintedRoute
   '/api/public/refresh-pudos': typeof ApiPublicRefreshPudosRoute
@@ -59,6 +66,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRoute
+  '/refresh-chronopost': typeof RefreshChronopostRoute
   '/refresh-mondialrelay': typeof RefreshMondialrelayRoute
   '/refresh-vinted': typeof RefreshVintedRoute
   '/api/public/refresh-pudos': typeof ApiPublicRefreshPudosRoute
@@ -68,6 +76,7 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/dashboard': typeof DashboardRoute
+  '/refresh-chronopost': typeof RefreshChronopostRoute
   '/refresh-mondialrelay': typeof RefreshMondialrelayRoute
   '/refresh-vinted': typeof RefreshVintedRoute
   '/api/public/refresh-pudos': typeof ApiPublicRefreshPudosRoute
@@ -78,6 +87,7 @@ export interface FileRouteTypes {
   fullPaths:
     | '/'
     | '/dashboard'
+    | '/refresh-chronopost'
     | '/refresh-mondialrelay'
     | '/refresh-vinted'
     | '/api/public/refresh-pudos'
@@ -86,6 +96,7 @@ export interface FileRouteTypes {
   to:
     | '/'
     | '/dashboard'
+    | '/refresh-chronopost'
     | '/refresh-mondialrelay'
     | '/refresh-vinted'
     | '/api/public/refresh-pudos'
@@ -94,6 +105,7 @@ export interface FileRouteTypes {
     | '__root__'
     | '/'
     | '/dashboard'
+    | '/refresh-chronopost'
     | '/refresh-mondialrelay'
     | '/refresh-vinted'
     | '/api/public/refresh-pudos'
@@ -103,6 +115,7 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   DashboardRoute: typeof DashboardRoute
+  RefreshChronopostRoute: typeof RefreshChronopostRoute
   RefreshMondialrelayRoute: typeof RefreshMondialrelayRoute
   RefreshVintedRoute: typeof RefreshVintedRoute
   ApiPublicRefreshPudosRoute: typeof ApiPublicRefreshPudosRoute
@@ -123,6 +136,13 @@ declare module '@tanstack/react-router' {
       path: '/refresh-mondialrelay'
       fullPath: '/refresh-mondialrelay'
       preLoaderRoute: typeof RefreshMondialrelayRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/refresh-chronopost': {
+      id: '/refresh-chronopost'
+      path: '/refresh-chronopost'
+      fullPath: '/refresh-chronopost'
+      preLoaderRoute: typeof RefreshChronopostRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/dashboard': {
@@ -159,6 +179,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   DashboardRoute: DashboardRoute,
+  RefreshChronopostRoute: RefreshChronopostRoute,
   RefreshMondialrelayRoute: RefreshMondialrelayRoute,
   RefreshVintedRoute: RefreshVintedRoute,
   ApiPublicRefreshPudosRoute: ApiPublicRefreshPudosRoute,
@@ -167,13 +188,3 @@ const rootRouteChildren: RootRouteChildren = {
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}

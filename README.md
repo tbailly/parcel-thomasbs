@@ -13,25 +13,29 @@ history, and run on-demand enrichment jobs.
 
 ## What it does
 
-### A unified map of every nearby pickup point
+<h3>A unified map of every nearby pickup point</h3>
+Each carrier has its own glyph and color. Clusters collapse at low zoom levels; filters in the top-right toggle carriers in and out. Tap any point and a sheet slides up with the address, today's opening hours, the rest of the week, additional notes, and shortcut buttons to open Google Maps or copy directions.
 
-Each carrier has its own glyph and color (Vinted Go = teal "V", Mondial Relay =
-red, Chronopost = blue cube). Clusters collapse at low zoom levels; filters in
-the top-right toggle carriers in and out.
-
-![Map overview](docs/screenshots/01-map-overview.png)
-
-Zoom in and the individual points spread out:
-
-![Detailed map](docs/screenshots/03-map-clusters.png)
-
-### Detailed point sheet with opening hours
-
-Tap any point and a sheet slides up with the address, today's opening hours,
-the rest of the week, the venue type, and shortcut buttons to open Google
-Maps or copy directions.
-
-![Point details with hours](docs/screenshots/02-point-details.png)
+<table>
+  <tr>
+    <td width="33%" valign="bottom">
+      <!-- <h3>A unified map of every nearby pickup point</h3>
+      Each carrier has its own glyph and color (Vinted Go = teal "V", Mondial Relay = red, Chronopost = blue cube). Clusters collapse at low zoom levels; filters in the top-right toggle carriers in and out. -->
+    </td>
+    <td width="33%" valign="bottom">
+      <!-- Zoom in and the individual points spread out: -->
+    </td>
+    <td width="33%" valign="bottom">
+      <!-- <h3>Detailed point sheet with opening hours</h3>
+      Tap any point and a sheet slides up with the address, today's opening hours, the rest of the week, the venue type, and shortcut buttons to open Google Maps or copy directions. -->
+    </td>
+  </tr>
+  <tr>
+    <td valign="top"><img src="docs/screenshots/01-map-clusters.png" width="100%"/></td>
+    <td valign="top"><img src="docs/screenshots/02-map-overview.png" width="100%"/></td>
+    <td valign="top"><img src="docs/screenshots/03-point-details.png" width="100%"/></td>
+  </tr>
+</table>
 
 ### Admin dashboard
 
@@ -39,28 +43,41 @@ Per-provider summary cards (count, last refresh time, refresh button), an
 orphan cleanup utility, and the full history of every query/refresh run with
 expandable per-point detail.
 
-![Dashboard](docs/screenshots/04-dashboard.png)
-
-![Query history](docs/screenshots/05-queries-history.png)
+<table>
+  <tr>
+    <td width="16.5%"></td>
+    <td width="33%"></td>
+    <td width="33%"></td>
+    <td width="16.5%"></td>
+  </tr>
+  <tr>
+    <td></td>
+    <td valign="top"><img src="docs/screenshots/04-dashboard.png" width="100%"/></td>
+    <td valign="top"><img src="docs/screenshots/05-queries-history.png" width="100%"/></td>
+    <td></td>
+  </tr>
+</table>
 
 ### Refresh pipelines, one per carrier
 
-**Chronopost** is fully automated server-side: a single click loops over each
-home address and scrapes the nearby relays.
-
-![Chronopost refresh](docs/screenshots/06-refresh-chronopost.png)
-
-**Mondial Relay** is a hybrid: their endpoint is CORS-locked, so the admin page
-copies a scraping script to the clipboard, opens the Mondial Relay site, and
-expects a JSON paste-back.
-
-![Mondial Relay refresh](docs/screenshots/07-refresh-mondialrelay.png)
-
-**Vinted Go** runs end-to-end on the server. A list refresh tiles the area
-around each home address; a background cron job then enriches each point with
-its opening hours, 5 points every 2 minutes, with a live progress bar.
-
-![Vinted Go refresh](docs/screenshots/08-refresh-vintedgo.png)
+<table>
+  <tr>
+    <td valign="top"><img src="docs/screenshots/06-refresh-chronopost.png" width="100%"/></td>
+    <td valign="top"><img src="docs/screenshots/07-refresh-mondialrelay.png" width="100%"/></td>
+    <td valign="top"><img src="docs/screenshots/08-refresh-vintedgo.png" width="100%"/></td>
+  </tr>
+  <tr>
+    <td width="33%" valign="bottom">
+      <b>Chronopost</b> is fully automated server-side: a single click loops over each home address and scrapes the nearby relays.
+    </td>
+    <td width="33%" valign="bottom">
+      <b>Mondial Relay</b> is a hybrid: their endpoint is CORS-locked, so the admin page copies a scraping script to the clipboard, opens the Mondial Relay site, and expects a JSON paste-back.
+    </td>
+    <td width="33%" valign="bottom">
+      <b>Vinted Go</b> runs end-to-end on the server. A list refresh tiles the area around each home address; a background cron job then enriches each point with its opening hours, 5 points every 2 minutes, with a live progress bar.
+    </td>
+  </tr>
+</table>
 
 ---
 
@@ -107,13 +124,3 @@ bun dev
 
 The Lovable Cloud backend is provisioned automatically; secrets are managed
 through the Lovable dashboard.
-
----
-
-## Roadmap ideas
-
-- Push notifications when a new relay opens within walking distance of a home
-  address
-- "Best relay for this parcel" recommendation that scores distance, opening
-  hours today, and carrier preferences
-- Public sharing of a single point via a short URL
